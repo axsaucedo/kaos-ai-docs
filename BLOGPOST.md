@@ -10,9 +10,9 @@ A user reports that a request "took forever." Another says they got a strange re
 
 Welcome to the observability challenge of agentic systems.
 
-In this article, I'll walk you through a complete end-to-end example of observability for agentic AI systems using OpenTelemetry with KAOS, the Kubernetes Agent Orchestration Framework.
+In this article, I'll walk you through a complete end-to-end example of observability for agentic AI systems using OpenTelemetry with KAOS, the Kubernetes Agent Orchestration System.
 
-We'll start with a working demo you can run yourself, visualize traces flowing through a multi-agent system using SigNoz, and then dive deep into the technical challenges of making AI agents observable. By the end, you will leave with the OTEL knowledge to extend your own code with agentic observability.
+We'll start with a working demo you can run yourself, visualize traces flowing through a multi-agent system, and then dive deep into the technical challenges of making AI agents observable. By the end, you will leave with the OTEL knowledge to extend your own code with agentic observability.
 
 ![](output.gif)
 
@@ -32,14 +32,107 @@ Agentic systems break all of these assumptions:
 | Single service per request | Model calls + tool calls + delegations |
 | Fixed cost per request | Cost varies by token usage |
 
+Consider the core loop of an AI agent—the deceptively simple pattern that has led to the current wave of innovation in AI systems:
+
+```python
+async def process_message(self, messages):
+    for step in range(self.max_steps):
+        # 1. Call the LLM
+        response = await self.model.chat(messages)
+        
+        # 2. If the model wants to use a tool, execute it
+        if response.has_tool_call:
+            result = await self.execute_tool(response.tool_call)
+            messages.append({"role": "tool", "content": result})
+            continue
+        
+        # 3. If the model wants to delegate, call another agent
+        if response.needs_delegation:
+            result = await self.delegate_to_agent(response.delegation)
+            messages.append({"role": "assistant", "content": result})
+            continue
+        
+        # 4. Otherwise, we have our final answer
+        return response.content
+```
 
 Each iteration of this loop may take a different path. The model might need one tool call or five. It might delegate to one sub-agent or chain through three. Traditional logging—"request started," "request completed"—tells you almost nothing about what actually happened.
+
+### The Three Pillars of Agent Observability
+
+OpenTelemetry provides three types of telemetry data, each serving a distinct purpose for agentic systems:
+
+**Traces** answer: "What path did this request take through my agents?"
+
+```
+HTTP POST /v1/chat/completions (15.2s total)
+└── agent.agentic_loop
+    ├── agent.step.1 (3.1s)
+    │   └── model.inference (3.0s)
+    ├── agent.step.2 (8.5s)
+    │   ├── model.inference (2.1s)
+    │   └── tool.web_search (6.3s)   ← Here's your bottleneck
+    └── agent.step.3 (3.4s)
+        └── model.inference (3.3s)
+```
+
+This trace hierarchy maps directly to what the agent did:
+
+```
+agent.agentic_loop (session_id=abc123, agent.name=coordinator)
+├── agent.step.1
+│   └── model.inference (gen_ai.request.model=gpt-4)
+├── agent.step.2
+│   ├── model.inference
+│   └── tool.web_search (tool.name=web_search)
+├── agent.step.3
+│   ├── model.inference
+│   └── delegate.researcher (agent.delegation.target=researcher)
+└── agent.step.4
+    └── model.inference
+```
+
+**Metrics** answer: "How is my system performing overall?"
+
+- How many tokens am I using per request?
+- What's my tool success rate?
+- What's my P99 latency for model calls?
+
+**Logs** answer: "What did the agent 'think' at each step?"
+
+```
+2024-01-15 10:30:45 INFO [trace_id=abc123] Starting message processing
+2024-01-15 10:30:47 DEBUG [trace_id=abc123] Model response: calling tool 'web_search'
+2024-01-15 10:30:53 ERROR [trace_id=abc123] Tool execution failed: API rate limited
+```
+
+The magic happens when these three are correlated. Click on that ERROR log in your observability backend, and it takes you to the exact span in the trace where the failure occurred.
+
+### Multi-Agent Context Propagation
+
+The real challenge comes with multi-agent systems. When Agent A delegates to Agent B, which delegates to Agent C, you want a single unified trace—not three disconnected ones.
+
+This requires **context propagation**: passing trace context through HTTP headers using the W3C Trace Context standard. The result is a unified trace across all agents:
+
+```
+coordinator.agent.agentic_loop (trace_id: abc123)
+├── coordinator.model.inference
+├── coordinator.delegate.researcher
+│   └── researcher.agent.agentic_loop (same trace_id: abc123!)
+│       ├── researcher.model.inference
+│       └── researcher.tool.web_search
+├── coordinator.model.inference
+└── coordinator.delegate.analyst
+    └── analyst.agent.agentic_loop (same trace_id: abc123!)
+        ├── analyst.model.inference
+        └── analyst.tool.calculator
+```
 
 ## The Practical Use-Case: A Multi-Agent Research System
 
 Let's start with something concrete. We'll use **KAOS** (Kubernetes Agent Orchestration System), an open-source framework I've been building that treats AI agents as first-class Kubernetes resources.
 
-### What We're Starting With
+### What We're Building
 
 Our use-case consists of a coordinator agent that delegates research and analysis tasks to specialist sub-agents:
 
@@ -65,16 +158,16 @@ graph TB
 
         subgraph Telemetry
             OTEL[OpenTelemetry<br/>Collector]
-            SigNoz[OTEL UI:<br>SigNoz/etc]
+            Backend[OTEL Backend:<br>SigNoz/Jaeger/etc]
         end
     end
 
     KAOS -.-> Telemetry
 
-    OTEL --> SigNoz
+    OTEL --> Backend
 ```
 
-Each component—agents, tools, and model APIs—sends traces, metrics, and logs to an OpenTelemetry collector, which forwards everything to SigNoz for visualization and analysis.
+Each component—agents, tools, and model APIs—sends traces, metrics, and logs to an OpenTelemetry collector, which forwards everything to your chosen backend for visualization and analysis.
 
 ### Prerequisites
 
@@ -83,25 +176,12 @@ Before we start, you'll need:
 1. **A Kubernetes cluster** (KIND, minikube, or a cloud cluster)
 2. **Helm** installed
 3. **An LLM API key** (OpenAI or Nebius)
-
-<!--
-TODO: Instead of introducing the UI all the way at the bottom, here we should introduce both the UI and CLI, namely as we can then start showing screenshots earlier (which reflect the TODOs)
-TODO: We have introduced new images that should be attached as these are created so that people can follow the creation on both UI and CLI, these include: 0-ui-kaos-installation, 0-ui-modelapi-creation, 0-ui-mcp-creation, 0-ui-agent-creation, 0-ui-agent-list.
--->
-
-<!--
-TODO: as mentioned above we should move the UI part and integrate it as above mentioned; that way we will provide at every step a way of carrying this out in kubernetes with kubectl, then with the UI. You can actually use the UI as the default, and we should also give the option to show the full YAML and kubectl approach and the kaos-cli approach (both which should be under a <details><summary></summary></details> block so that it can be expanded as people want more detail)
--->
+4. **KAOS CLI** installed (optional, for UI access)
 
 ### Step 1: Install KAOS with Telemetry Enabled
 
-First, let's install the KAOS operator with OpenTelemetry enabled and SigNoz as our observability backend:
+First, let's install the KAOS operator with OpenTelemetry enabled and an observability backend. We'll use SigNoz as an open-source, OpenTelemetry-native option:
 
-<!--
-TODO: Verify that using oci:// is correct as currently we publish the charts differently (see the codebase)
-TODO: We can skip adding loadbalancer for signoz as we can just use port-forward
-TODO: (done) added creation on kaos-hierarchy - this needs to be updated as per below
--->
 ```bash
 # Create namespaces
 kubectl create namespace kaos-system
@@ -110,73 +190,121 @@ kubectl create namespace kaos-hierarchy
 
 # Install SigNoz (OpenTelemetry-native observability backend)
 helm repo add signoz https://charts.signoz.io
-helm install signoz signoz/signoz \
-  --namespace observability \
-  --set queryService.service.type=LoadBalancer
+helm install signoz signoz/signoz --namespace observability
 
 # Install KAOS with telemetry enabled
-helm install kaos oci://ghcr.io/axsaucedo/kaos/chart \
+helm repo add kaos https://axsaucedo.github.io/kaos
+helm install kaos kaos/kaos \
   --namespace kaos-system \
   --set logLevel=DEBUG \
   --set telemetry.enabled=true \
   --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
 ```
 
-Here we already install KAOS with default telemetry collector endpoint; alternatively we can also define / override it on the respective resources, but this allows us to have a global default.
+Here we install KAOS with a default telemetry collector endpoint. This allows us to have a global default that propagates to all resources.
+
+<details>
+<summary>📋 Alternative: Using OCI Registry</summary>
+
+```bash
+# If using OCI-based chart distribution
+helm install kaos oci://ghcr.io/axsaucedo/kaos/kaos-chart \
+  --namespace kaos-system \
+  --set logLevel=DEBUG \
+  --set telemetry.enabled=true \
+  --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
+```
+</details>
+
+To access the SigNoz UI later, use port-forward:
+
+```bash
+kubectl port-forward svc/signoz-frontend -n observability 3301:3301
+# Open http://localhost:3301
+```
 
 ### Step 2: Create Your API Key Secret
 
-<!--
-TODO: Move all of these to another namespace, let's do kaos-hierarchy
--->
-**For OpenAI, Nebius or any provider:**
+Create a secret with your LLM provider API key:
+
 ```bash
 kubectl create secret generic llm-api-key \
-  --namespace kaos-system \
+  --namespace kaos-hierarchy \
   --from-literal=api-key="your-api-key"
 ```
 
 ### Step 3: Deploy the ModelAPI
 
+The **ModelAPI** resource in KAOS provides a unified interface for LLM access. It supports two modes:
 
-<!--
-TODO: Add more context on the MOdelAPI and what it's and how it's used, in context of kompute, what metrics do we care about, etc
-TODO: Done alraeady remove telemetry as it's set with helm 
--->
+- **Proxy Mode**: Routes requests through LiteLLM to external providers (OpenAI, Anthropic, Nebius, etc.)
+- **Hosted Mode**: Runs models locally using Ollama
 
-**For OpenAI:**
+For observability, the ModelAPI gives us visibility into model call latency, token usage, and error rates—critical metrics for understanding agent performance and controlling costs.
+
 ```yaml
 apiVersion: kaos.tools/v1alpha1
 kind: ModelAPI
 metadata:
   name: llm-proxy
-  namespace: kaos-system
+  namespace: kaos-hierarchy
 spec:
   mode: Proxy
   proxyConfig:
     models: ["*"]
-    provider: openai # alternatively nebius or any other provider
+    provider: openai  # alternatively nebius, anthropic, etc.
     apiKeySecretRef:
       name: llm-api-key
       key: api-key
 ```
 
-### Step 4: Deploy the MCP Tool Servers
+Apply and verify:
 
-<!-- 
-TODO: Talk about the MCP Server concept in KAOS and introduce what we're doing
-TODO: Also mention how these are test servers and how instead would be different for prod
-TODO: Migrate these servers to use the new CRD setup based on PR 46 of KAOS
-TODO: Talk about specifically these MCP Servers and how they will be used
--->
+```bash
+kubectl apply -f modelapi.yaml
+kubectl get modelapi -n kaos-hierarchy
+# Wait for STATUS: Ready
+```
+
+<details>
+<summary>📋 Using Nebius or other OpenAI-compatible providers</summary>
 
 ```yaml
-# Calculator Tool
+apiVersion: kaos.tools/v1alpha1
+kind: ModelAPI
+metadata:
+  name: llm-proxy
+  namespace: kaos-hierarchy
+spec:
+  mode: Proxy
+  proxyConfig:
+    models: ["*"]
+    provider: openai
+    apiBase: https://api.studio.nebius.com/v1  # Custom API base
+    apiKeySecretRef:
+      name: llm-api-key
+      key: api-key
+```
+</details>
+
+### Step 4: Deploy the MCP Tool Servers
+
+**MCP (Model Context Protocol) Servers** in KAOS provide tools that agents can use. MCP is an open standard for tool integration, allowing agents to interact with external systems through a consistent interface.
+
+Each MCPServer:
+- Exposes a set of tools with typed arguments and descriptions
+- Generates JSON schemas automatically from Python type hints
+- Integrates with OpenTelemetry for tool execution tracing
+
+For our demo, we'll create a calculator server. In production, you'd connect to real APIs, databases, or external services.
+
+```yaml
+# Calculator Tool Server
 apiVersion: kaos.tools/v1alpha1
 kind: MCPServer
 metadata:
   name: calculator
-  namespace: kaos-system
+  namespace: kaos-hierarchy
 spec:
   type: python-runtime
   config:
@@ -193,30 +321,124 @@ spec:
         def percentage(value: float, total: float) -> float:
             """Calculate percentage of value relative to total."""
             return (value / total) * 100
+---
+# Echo Tool Server (for demonstration)
+apiVersion: kaos.tools/v1alpha1
+kind: MCPServer
+metadata:
+  name: echo-search
+  namespace: kaos-hierarchy
+spec:
+  type: python-runtime
+  config:
+    tools:
+      fromString: |
+        def web_search(query: str) -> str:
+            """Simulate a web search with the given query."""
+            return f"Search results for: {query}. [Simulated results: Found 3 relevant articles about {query}]"
+            
+        def echo(message: str) -> str:
+            """Echo back the message for testing."""
+            return f"Echo: {message}"
 ```
 
-<!--
-TODO: Here you are missing the other server on web search, either implement it or add another potential simpler server like the echo server (which just returns the input)
--->
+Apply and verify:
+
+```bash
+kubectl apply -f mcpservers.yaml
+kubectl get mcpserver -n kaos-hierarchy
+# Wait for all STATUS: Ready
+```
 
 ### Step 5: Deploy the Agents
 
-<!--
-TODO: Talk about the concept of an agent in KAOS by introducing the simplest agent, here we should talk about each of them one by one, starting with the researcher and analyst as these need to be ready before
-TODO: When introducing the resaercher can talk about the instructions, and what we care about in regards to the observability of a single agent, similarly then introduce the researcher without as much context
-TODO: Then when introducing the coordinator talk more about what we care about on multi-agent and howdo we change on observability here
--->
+Now let's deploy our multi-agent system. We'll build progressively:
+
+#### 5a. The Researcher Agent
+
+The **Agent** resource in KAOS represents an AI entity that can process requests, call models, execute tools, and delegate to other agents. Each agent:
+
+- Exposes an OpenAI-compatible `/v1/chat/completions` endpoint
+- Implements the agentic loop (model → tools → model → ...)
+- Supports configurable memory for session state
+
+The Researcher agent specializes in gathering information:
 
 ```yaml
-# Coordinator Agent
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+  namespace: kaos-hierarchy
+spec:
+  modelAPI: llm-proxy
+  model: "openai/gpt-4o"
+  mcpServers:
+    - echo-search
+  config:
+    description: "Research specialist with web search capabilities"
+    instructions: "You research topics using web search and provide detailed findings."
+  agentNetwork:
+    expose: true
+```
+
+For single-agent observability, we care about:
+- **Model call latency**: How long does inference take?
+- **Tool execution time**: Are tools responding quickly?
+- **Step count**: How many iterations does the agent need?
+
+Apply and verify:
+
+```bash
+kubectl apply -f researcher.yaml
+kubectl get agent researcher -n kaos-hierarchy
+# Wait for STATUS: Ready
+```
+
+#### 5b. The Analyst Agent
+
+The Analyst agent focuses on data analysis and calculations:
+
+```yaml
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: analyst
+  namespace: kaos-hierarchy
+spec:
+  modelAPI: llm-proxy
+  model: "openai/gpt-4o"
+  mcpServers:
+    - calculator
+  config:
+    description: "Data analyst with calculation capabilities"
+    instructions: "You analyze data and perform calculations."
+  agentNetwork:
+    expose: true
+```
+
+```bash
+kubectl apply -f analyst.yaml
+kubectl get agent analyst -n kaos-hierarchy
+```
+
+#### 5c. The Coordinator Agent
+
+Finally, the Coordinator orchestrates the other agents. For multi-agent observability, we gain additional concerns:
+
+- **Delegation patterns**: Which agents are called and how often?
+- **Cross-agent latency**: How much time is spent in delegation vs. local processing?
+- **Trace correlation**: Can we see the full request flow across agents?
+
+```yaml
 apiVersion: kaos.tools/v1alpha1
 kind: Agent
 metadata:
   name: coordinator
-  namespace: kaos-system
+  namespace: kaos-hierarchy
 spec:
   modelAPI: llm-proxy
-  model: "openai/gpt-4o"  # or "Qwen/Qwen3-30B-A3B" for Nebius
+  model: "openai/gpt-4o"
   config:
     description: "Coordinator that delegates to specialist agents"
     instructions: |
@@ -229,92 +451,60 @@ spec:
     access:
       - researcher
       - analyst
----
-# Researcher Agent with Web Search
-apiVersion: kaos.tools/v1alpha1
-kind: Agent
-metadata:
-  name: researcher
-  namespace: kaos-system
-spec:
-  modelAPI: llm-proxy
-  model: "openai/gpt-4o"
-  mcpServers:
-    - web-search
-  config:
-    description: "Research specialist with web search capabilities"
-    instructions: "You research topics using web search and provide detailed findings."
-    telemetry:
-      enabled: true
-      endpoint: "http://signoz-otel-collector.observability:4317"
-  agentNetwork:
-    expose: true
----
-# Analyst Agent with Calculator
-apiVersion: kaos.tools/v1alpha1
-kind: Agent
-metadata:
-  name: analyst
-  namespace: kaos-system
-spec:
-  modelAPI: llm-proxy
-  model: "openai/gpt-4o"
-  mcpServers:
-    - calculator
-  config:
-    description: "Data analyst with calculation capabilities"
-    instructions: "You analyze data and perform calculations."
-    telemetry:
-      enabled: true
-      endpoint: "http://signoz-otel-collector.observability:4317"
-  agentNetwork:
-    expose: true
 ```
-
-<!-- TODO: Instead of applying everything at the very end and waiting for everything, make sure that we apply each and see the status with `kubectl get agent / mcp/ modelapi` to see that htey are ready, instead of here just a rollout at the end whcih is not great -->
-Apply all resources:
 
 ```bash
-kubectl apply -f modelapi.yaml
-kubectl apply -f agents.yaml
-kubectl apply -f mcpservers.yaml
-```
-
-Wait for everything to be ready:
-
-```bash
-kubectl wait --for=condition=Ready agent --all -n kaos-system --timeout=120s
+kubectl apply -f coordinator.yaml
+kubectl get agent -n kaos-hierarchy
+# All three agents should show STATUS: Ready
 ```
 
 ---
 
-## Putting it all together: Monitoring KAOS
+## Putting It All Together: Monitoring KAOS
 
 Now let's generate some traffic and see what observability gives us.
 
-<!--
-TODO: as mentioned above we should move the UI part and integrate it as above mentioned above instead of just a completely separate one, so delete this.
--->
-### The KAOS UI Experience
+### Interacting with Agents
 
-KAOS provides a web UI for interacting with agents. Port-forward to access it:
+You can interact with agents in multiple ways:
 
-<!--
-TODO: This is completely wrong, the kaos ui does NOT run in the cluster, you have to run `kaos ui` to open it, and then you can access it. 
--->
+**Using the KAOS UI** (recommended for visualization):
+
 ```bash
-kubectl port-forward svc/kaos-ui -n kaos-system 3000:80
+# Run the KAOS UI locally
+kaos ui
+# Opens http://localhost:5173
 ```
 
-Open http://localhost:3000 to see the agent dashboard:
-
-<!-- TODO: This should be integrated above as mentioned -->
 ![KAOS UI Home - showing deployed agents](images/1-kaos-ui-home.png)
 
 *The KAOS UI displays all deployed agents with their status, model configuration, and available tools.*
 
-<!-- TODO: This section should be refactored as let's now send a requets. As mentioend we should also show the kubectl port-forward svc/coordinator version as well as the kubectl ui invoke version (part of the new codebase changes) -->
-Click on the coordinator agent and send a message:
+**Using kubectl port-forward** (for direct API access):
+
+```bash
+kubectl port-forward svc/coordinator -n kaos-hierarchy 8080:80
+# Then use curl or any HTTP client
+```
+
+<details>
+<summary>📋 Example curl request</summary>
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Research the current AI chip market and calculate the market share of the top 3 companies."}
+    ]
+  }'
+```
+</details>
+
+### Sending a Request
+
+From the KAOS UI, click on the coordinator agent and send a message:
 
 ![Sending a message through KAOS UI](images/2-kaos-send-message.png)
 
@@ -329,35 +519,16 @@ Behind the scenes, this triggers a complex chain of operations:
 
 All of this—every LLM call, every tool execution, every delegation—is captured in our traces.
 
-### Tracing Multi-Agent Flows
+### Viewing Traces: Understanding Request Flow
 
-<!-- TODO: provide the explicit command now for sure to forward signoz and open as this is something that all users will benefit
-TODO: talk about traces and why traces are important
+Access your OpenTelemetry backend (SigNoz in this example):
 
-Here is a snippet from another of the blogs that provides a good view:
-
-This produces a trace hierarchy that maps directly to what the agent did:
-
-```
-agent.agentic_loop (session_id=abc123, agent.name=coordinator)
-├── agent.step.1
-│   └── model.inference (gen_ai.request.model=gpt-4)
-├── agent.step.2
-│   ├── model.inference
-│   └── tool.web_search (tool.name=web_search)
-├── agent.step.3
-│   ├── model.inference
-│   └── delegate.researcher (agent.delegation.target=researcher)
-└── agent.step.4
-    └── model.inference
+```bash
+kubectl port-forward svc/signoz-frontend -n observability 3301:3301
+# Open http://localhost:3301 and navigate to Traces
 ```
 
-Also we can talk about context propagation:
-
-The real challenge comes with multi-agent systems. When Agent A delegates to Agent B, which delegates to Agent C, you want a single unified trace—not three disconnected ones.
-
-This requires **context propagation**: passing trace context through HTTP headers.
--->
+**Why traces matter for agentic systems**: Unlike traditional request-response services, agents make multiple decisions per request. Traces let you see each decision point, how long it took, and what path the agent chose.
 
 ![SigNoz Tracing Overview](images/3-signoz-tracing-overview.png)
 
@@ -376,13 +547,14 @@ This trace visualization answers questions that would otherwise require hours of
 - **How many LLM calls were made?** 6 calls across the three agents.
 - **Did any tools fail?** All tools completed successfully (green spans).
 
-### Log Correlation: The Secret Sauce
+### Log Correlation: Understanding Agent Reasoning
 
-<!-- TODO: Talk less about SigNoz and more about OTEL, this will be going on the OTEL blog so we need to make sure that the focus is there, signoz is just going to be the shiny viz tool so we don't have to mention it much
-TODO: This section is writen quite lazily, we need to provide more context, more information, not just saying one word and then showing a screenshot - make sure to improve this entire content
--->
+Traces tell you *what* happened. Logs tell you *why*. OpenTelemetry correlates them automatically through `trace_id` and `span_id` attributes.
 
-Traces tell you *what* happened. Logs tell you *why*. SigNoz correlates them automatically.
+Every log entry includes these identifiers, enabling you to:
+1. Click on a span in your trace
+2. View all logs emitted during that span
+3. Understand the agent's reasoning at each step
 
 Click on a span and select "View Logs":
 
@@ -390,21 +562,21 @@ Click on a span and select "View Logs":
 
 *Logs filtered by trace_id, showing exactly what happened during this span.*
 
-Every log entry includes `trace_id` and `span_id`, enabling this correlation:
+Drill deeper into individual log entries:
 
 ![SigNoz Log Deep Dive](images/5-signoz-log-deep-dive.png)
 
 *Detailed log view showing the agent's reasoning: "Delegating to researcher for market data..."*
 
-Click to expand a log entry:
+Expand a log entry for full context:
 
 ![SigNoz Log Open](images/6-signoz-log-open.png)
 
 *Full log context including all attributes, resource labels, and the complete message.*
 
-### Exception Tracking: Finding the Needle
+### Exception Tracking: Finding Production Issues
 
-In production, things fail. OpenTelemetry captures exceptions as first-class citizens.
+In production, things fail. OpenTelemetry captures exceptions as first-class citizens, attaching them to the span where they occurred.
 
 Navigate to the Exceptions tab:
 
@@ -418,7 +590,7 @@ Click on an exception to see details:
 
 *Stack trace, error message, and context about when and where this exception occurred.*
 
-The magic: click "View Trace" to jump directly to the trace where this exception happened:
+The key capability: click "View Trace" to jump directly to the trace where this exception happened:
 
 ![SigNoz Exception Correlated Trace](images/9-signoz-log-exception-correlated-trace.png)
 
@@ -430,11 +602,9 @@ Zoom in on the failing span:
 
 *The tool.web_search span marked as ERROR, with the exception attached as a span event.*
 
-This correlation is only possible because we instrument with proper context propagation—more on this later.
+This correlation is only possible because we instrument with proper context propagation.
 
-### Metrics: The Big Picture
-
-<!-- TODO: This section is also quite poorly set up, improve it -->
+### Metrics: Operational Overview
 
 While traces show individual requests, metrics show trends over time:
 
@@ -442,7 +612,7 @@ While traces show individual requests, metrics show trends over time:
 
 *Metrics dashboard showing request rates, latency percentiles, error rates, and token usage across all agents.*
 
-Key metrics for agentic systems include:
+Key metrics for agentic systems:
 
 | Metric | What It Tells You |
 |--------|-------------------|
@@ -491,9 +661,9 @@ flowchart TB
     
     subgraph OTELStack["Telemetry Pipeline"]
         KOM --> |OTLP gRPC| Collector[OTEL Collector]
-        Collector --> |Traces| SigNoz[(SigNoz)]
-        Collector --> |Metrics| SigNoz
-        Collector --> |Logs| SigNoz
+        Collector --> |Traces| Backend[(Backend)]
+        Collector --> |Metrics| Backend
+        Collector --> |Logs| Backend
     end
     
     HelmValues[Helm values.yaml] --> ControlPlane
@@ -501,79 +671,233 @@ flowchart TB
 
 The key insight: **telemetry configuration flows from Helm → Operator → Data Plane**. Users configure telemetry once in `values.yaml`, and the operator propagates it to all components.
 
+### Instrumenting the Agentic Loop
+
+The core challenge is instrumenting an iterative loop where each iteration may have different operations. Here's the pattern we use:
+
+```python
+async def process_message(self, session_id: str, messages: List[Dict]) -> str:
+    """Process message through agentic loop with full tracing."""
+    
+    # Start root span for entire message processing
+    span = otel.span_begin("agent.agentic_loop", SpanKind.INTERNAL)
+    span.set_attribute("agent.name", self.name)
+    span.set_attribute("session.id", session_id)
+    span.set_attribute("agent.max_steps", self.max_steps)
+    
+    try:
+        for step in range(self.max_steps):
+            # Span for each iteration
+            step_span = otel.span_begin(f"agent.step.{step + 1}")
+            step_span.set_attribute("step", step + 1)
+            
+            try:
+                # Model inference with its own span
+                model_span = otel.span_begin("model.inference", SpanKind.CLIENT)
+                model_span.set_attribute("gen_ai.request.model", self.model_name)
+                
+                try:
+                    response = await self.model_api.chat(messages)
+                    model_span.set_attribute("gen_ai.response.finish_reason", 
+                                             response.finish_reason)
+                    otel.span_success(model_span)
+                except Exception as e:
+                    logger.error(f"Model call failed: {e}")  # Log BEFORE span close
+                    otel.span_failure(model_span, e)
+                    raise
+                
+                # Tool execution
+                if response.has_tool_call:
+                    tool_span = otel.span_begin(f"tool.{response.tool_name}", SpanKind.CLIENT)
+                    tool_span.set_attribute("tool.name", response.tool_name)
+                    
+                    try:
+                        result = await self._execute_tool(response.tool_call)
+                        messages.append({"role": "tool", "content": result})
+                        logger.debug(f"Tool {response.tool_name} returned: {result[:100]}...")
+                        otel.span_success(tool_span)
+                    except Exception as e:
+                        logger.error(f"Tool {response.tool_name} failed: {e}")
+                        otel.span_failure(tool_span, e)
+                        raise
+                    
+                    otel.span_success(step_span)
+                    continue
+                
+                # Delegation to sub-agent
+                if response.needs_delegation:
+                    del_span = otel.span_begin(f"delegate.{response.target_agent}", 
+                                                SpanKind.CLIENT)
+                    del_span.set_attribute("agent.delegation.target", response.target_agent)
+                    
+                    try:
+                        result = await self._delegate(response.target_agent, response.task)
+                        messages.append({"role": "assistant", "content": result})
+                        otel.span_success(del_span)
+                    except Exception as e:
+                        logger.error(f"Delegation to {response.target_agent} failed: {e}")
+                        otel.span_failure(del_span, e)
+                        raise
+                    
+                    otel.span_success(step_span)
+                    continue
+                
+                # Final answer
+                otel.span_success(step_span)
+                otel.span_success(span)
+                return response.content
+                
+            except Exception as e:
+                otel.span_failure(step_span, e)
+                raise
+        
+        # Max steps reached
+        otel.span_success(span)
+        return response.content
+        
+    except Exception as e:
+        otel.span_failure(span, e)
+        raise
+```
+
+Key patterns to note:
+
+1. **Hierarchical spans**: Parent span for the loop, child spans for each step, grandchild spans for operations
+2. **Log before span close**: Emit logs while trace context is active for correlation
+3. **Explicit span management**: Use try/finally pattern to ensure spans are always closed
+
+### Context Propagation for Multi-Agent Systems
+
+When delegating to sub-agents (running in separate pods), we must propagate trace context:
+
+```python
+# Inject context into outgoing request
+from opentelemetry.propagate import inject
+
+async def delegate(self, target_agent: str, task: str) -> str:
+    headers = {"Content-Type": "application/json"}
+    
+    # Inject current trace context into headers
+    inject(headers)  # Adds 'traceparent' and 'tracestate' headers
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"http://{target_agent}/v1/chat/completions",
+            headers=headers,
+            json={"messages": [{"role": "user", "content": task}]}
+        )
+    return response.json()["choices"][0]["message"]["content"]
+```
+
+```python
+# Extract context from incoming request
+from opentelemetry.propagate import extract
+
+@app.post("/v1/chat/completions")
+async def chat(request: Request, body: ChatRequest):
+    # Extract trace context from incoming headers
+    context = extract(request.headers)
+    
+    # Attach to current context so new spans are children
+    token = otel_context.attach(context)
+    try:
+        return await agent.process_message(body.messages)
+    finally:
+        otel_context.detach(token)
+```
+
+### Log Export and Correlation
+
+For log-trace correlation, we connect Python's logging to OpenTelemetry:
+
+```python
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+# Set up OTLP log export
+logger_provider = LoggerProvider(resource=resource)
+logger_provider.add_log_record_processor(
+    BatchLogRecordProcessor(OTLPLogExporter(endpoint=endpoint))
+)
+
+# Attach handler to Python root logger
+handler = LoggingHandler(level=logging.DEBUG, logger_provider=logger_provider)
+logging.getLogger().addHandler(handler)
+```
+
+The logging instrumentation automatically injects `trace_id` and `span_id` into log records when there's an active span context.
+
+**Critical pattern**: Always emit logs *before* closing spans:
+
+```python
+# Correct: Log while context is active
+logger.error(f"Operation failed: {e}")  # Has trace_id ✓
+otel.span_failure(span, e)
+
+# Wrong: Log after context is detached
+otel.span_failure(span, e)  # Detaches context
+logger.error(f"Operation failed: {e}")  # No trace_id!
+```
+
+### Metrics for Agent Operations
+
+We track metrics with low-cardinality labels to avoid cardinality explosions:
+
+```python
+from opentelemetry import metrics
+
+meter = metrics.get_meter("kaos-agent")
+
+# Counters
+request_counter = meter.create_counter(
+    "kaos.requests",
+    description="Number of requests processed",
+    unit="1"
+)
+
+model_call_counter = meter.create_counter(
+    "kaos.model.calls",
+    description="Number of model inference calls",
+    unit="1"
+)
+
+# Histograms for latency
+request_duration = meter.create_histogram(
+    "kaos.request.duration",
+    description="Request processing duration in milliseconds",
+    unit="ms"
+)
+
+# Usage example
+request_counter.add(1, {"agent.name": self.name, "status": "success"})
+request_duration.record(duration_ms, {"agent.name": self.name})
+```
+
+**Avoid high-cardinality labels**: Never use session IDs, user IDs, prompt content, or other unbounded values as metric labels. Put those in logs or trace attributes instead.
 
 ---
 
-<!-- TODO: move this actually higher up, as it's written much better, start the previous section with this below, and cover the respective content below integrated into the areas of traces, metrics and logs above respectively-->
-### The Three Pillars of Agent Observability
+## Summary
 
-OpenTelemetry provides three types of telemetry data, each serving a distinct purpose for agentic systems:
+Instrumenting agentic AI systems with OpenTelemetry requires understanding the unique challenges these systems present:
 
-**Traces** answer: "What path did this request take through my agents?"
+1. **Iterative loops** need span hierarchies that map to logical operations
+2. **Multi-agent delegation** requires explicit context propagation using W3C Trace Context
+3. **Tool execution** benefits from dedicated spans with clear naming
+4. **Log-trace correlation** requires emitting logs before span close
+5. **Metrics** need low-cardinality labels to avoid storage explosions
 
-```
-HTTP POST /v1/chat/completions (15.2s total)
-└── agent.agentic_loop
-    ├── agent.step.1 (3.1s)
-    │   └── model.inference (3.0s)
-    ├── agent.step.2 (8.5s)
-    │   ├── model.inference (2.1s)
-    │   └── tool.web_search (6.3s)   ← Here's your bottleneck
-    └── agent.step.3 (3.4s)
-        └── model.inference (3.3s)
-```
+The patterns we've covered apply to any agentic system, not just KAOS. Start instrumenting now—the agents of tomorrow will be as ubiquitous as microservices are today, and OpenTelemetry gives you the visibility to operate them with confidence.
 
-**Metrics** answer: "How is my system performing overall?"
+---
 
-- How many tokens am I using per request?
-- What's my tool success rate?
-- What's my P99 latency for model calls?
+## Resources
 
-**Logs** answer: "What did the agent 'think' at each step?"
-
-```
-2024-01-15 10:30:45 INFO [trace_id=abc123] Starting message processing
-2024-01-15 10:30:47 DEBUG [trace_id=abc123] Model response: calling tool 'web_search'
-2024-01-15 10:30:53 ERROR [trace_id=abc123] Tool execution failed: API rate limited
-```
-
-The magic happens when these three are correlated. Click on that ERROR log in your observability backend, and it takes you to the exact span in the trace where the failure occurred.
-
-
-
-<!--
-TODO: The section below is currently appendix, but would be ideal to integate above somewhere to ensure that we have an intuition of how this works. Also comment and talk about the agentic loop and how its so simple but it has led to all the innovations; also mention that this is pseudo code but that we'll talk about here how we want to integrate. Maybe we can put this also as part of the telemetry section where we start talking about log/metrics/etc - yes let's do that
--->
-Consider the core loop of an AI agent:
-
-```python
-async def process_message(self, messages):
-    for step in range(self.max_steps):
-        # 1. Call the LLM
-        response = await self.model.chat(messages)
-        
-        # 2. If the model wants to use a tool, execute it
-        if response.has_tool_call:
-            result = await self.execute_tool(response.tool_call)
-            messages.append({"role": "tool", "content": result})
-            continue
-        
-        # 3. If the model wants to delegate, call another agent
-        if response.needs_delegation:
-            result = await self.delegate_to_agent(response.delegation)
-            messages.append({"role": "assistant", "content": result})
-            continue
-        
-        # 4. Otherwise, we have our final answer
-        return response.content
-```
-
-Each iteration of this loop may take a different path. The model might need one tool call or five. It might delegate to one sub-agent or chain through three. Traditional logging—"request started," "request completed"—tells you almost nothing about what actually happened.
-
-<!-- TODO: We'll follow the same approach as above, and include a python code snippet with the premise that we're going deeper. in this case we'll want to also include the pseudo-code for the traces, here we can actually talk about using either the `with` contextmanager keyword even if in KAOS we're not using it and we're doing it sequentially (let's assess if relevant to talk about it); also how we decided to remove the automatic instrucmentation of FastAPI and HTTPX even though we can still link references as that can give some free-lunch
-TODO: Similarly we can talk about how it's implemented for the logs, and how this is more of the enabling
-TODO: We can also add a mention on the logs how we also decide to separate the logs for collecting the insights wereas the memory is where we capture the entire full extent, which is where we can allow deeper dive, but that this is also something that willl be explored
-TODO: And finally for the metrics we can also decide how we approach it, why it's important, how it's there in python, and etc.
--->
+- **KAOS Framework**: [github.com/axsaucedo/kaos](https://github.com/axsaucedo/kaos) - The open-source framework used in this article
+- **OpenTelemetry Python**: [opentelemetry.io/docs/languages/python](https://opentelemetry.io/docs/languages/python/) - Official Python SDK documentation
+- **OpenTelemetry GenAI Conventions**: [github.com/open-telemetry/semantic-conventions](https://github.com/open-telemetry/semantic-conventions) - Emerging standards for AI observability
+- **SigNoz**: [signoz.io](https://signoz.io/) - Open-source APM with native OpenTelemetry support
 
 
