@@ -174,23 +174,38 @@ Each component—agents, tools, and model APIs—sends traces, metrics, and logs
 Before we start, you'll need:
 
 1. **A Kubernetes cluster** (KIND, minikube, or a cloud cluster)
-2. **Helm** installed
+2. **kubectl** configured with cluster access
 3. **An LLM API key** (OpenAI or Nebius)
-4. **KAOS CLI** installed (optional, for UI access)
+4. **KAOS CLI** installed: `pip install kaos-cli`
 
 ### Step 1: Install KAOS with Telemetry Enabled
 
-First, let's install the KAOS operator with OpenTelemetry enabled and an observability backend. We'll use SigNoz as an open-source, OpenTelemetry-native option:
+First, let's install the KAOS operator with OpenTelemetry enabled and an observability backend. We'll use SigNoz as an open-source, OpenTelemetry-native option.
+
+**Using the KAOS CLI** (recommended):
 
 ```bash
-# Create namespaces
-kubectl create namespace kaos-system
-kubectl create namespace observability
-kubectl create namespace kaos-hierarchy
+# Install the KAOS operator
+kaos system install --wait
 
-# Install SigNoz (OpenTelemetry-native observability backend)
-helm repo add signoz https://charts.signoz.io
-helm install signoz signoz/signoz --namespace observability
+# Verify the installation
+kaos system status
+```
+
+The CLI wraps the Helm installation and provides a simpler interface. After installation, you can check available MCP runtimes:
+
+```bash
+kaos system runtimes
+```
+
+This shows the registered runtimes like `python-string`, `kubernetes`, `slack`, and `custom`.
+
+<details>
+<summary>📋 Alternative: Using Helm directly</summary>
+
+```bash
+# Create namespace
+kubectl create namespace kaos-system
 
 # Install KAOS with telemetry enabled
 helm repo add kaos https://axsaucedo.github.io/kaos
@@ -200,21 +215,19 @@ helm install kaos kaos/kaos \
   --set telemetry.enabled=true \
   --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
 ```
+</details>
 
-Here we install KAOS with a default telemetry collector endpoint. This allows us to have a global default that propagates to all resources.
-
-<details>
-<summary>📋 Alternative: Using OCI Registry</summary>
+Now let's install SigNoz for observability:
 
 ```bash
-# If using OCI-based chart distribution
-helm install kaos oci://ghcr.io/axsaucedo/kaos/kaos-chart \
-  --namespace kaos-system \
-  --set logLevel=DEBUG \
-  --set telemetry.enabled=true \
-  --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
+# Create observability namespace
+kubectl create namespace observability
+kubectl create namespace kaos-hierarchy
+
+# Install SigNoz (OpenTelemetry-native observability backend)
+helm repo add signoz https://charts.signoz.io
+helm install signoz signoz/signoz --namespace observability
 ```
-</details>
 
 To access the SigNoz UI later, use port-forward:
 
@@ -256,6 +269,11 @@ spec:
     apiKeySecretRef:
       name: llm-api-key
       key: api-key
+  # Optional: container-level overrides
+  container:
+    env:
+    - name: LITELLM_LOG
+      value: "DEBUG"
 ```
 
 Apply and verify:
@@ -265,6 +283,21 @@ kubectl apply -f modelapi.yaml
 kubectl get modelapi -n kaos-hierarchy
 # Wait for STATUS: Ready
 ```
+
+<details>
+<summary>📋 Alternative: Using KAOS CLI</summary>
+
+```bash
+# Deploy from YAML
+kaos modelapi deploy modelapi.yaml
+
+# List ModelAPIs
+kaos modelapi list -n kaos-hierarchy
+
+# View logs
+kaos modelapi logs llm-proxy -n kaos-hierarchy
+```
+</details>
 
 <details>
 <summary>📋 Using Nebius or other OpenAI-compatible providers</summary>
@@ -291,10 +324,14 @@ spec:
 
 **MCP (Model Context Protocol) Servers** in KAOS provide tools that agents can use. MCP is an open standard for tool integration, allowing agents to interact with external systems through a consistent interface.
 
-Each MCPServer:
-- Exposes a set of tools with typed arguments and descriptions
-- Generates JSON schemas automatically from Python type hints
-- Integrates with OpenTelemetry for tool execution tracing
+KAOS supports multiple MCP runtimes via a ConfigMap-based registry. The most commonly used are:
+
+| Runtime | Description |
+|---------|-------------|
+| `python-string` | Define tools as inline Python functions |
+| `kubernetes` | Kubernetes CRUD operations |
+| `slack` | Slack messaging integration |
+| `custom` | Your own container image |
 
 For our demo, we'll create a calculator server. In production, you'd connect to real APIs, databases, or external services.
 
@@ -306,21 +343,19 @@ metadata:
   name: calculator
   namespace: kaos-hierarchy
 spec:
-  type: python-runtime
-  config:
-    tools:
-      fromString: |
-        def add(a: float, b: float) -> float:
-            """Add two numbers together."""
-            return a + b
-            
-        def multiply(a: float, b: float) -> float:
-            """Multiply two numbers."""
-            return a * b
-            
-        def percentage(value: float, total: float) -> float:
-            """Calculate percentage of value relative to total."""
-            return (value / total) * 100
+  runtime: python-string
+  params: |
+    def add(a: float, b: float) -> float:
+        """Add two numbers together."""
+        return a + b
+        
+    def multiply(a: float, b: float) -> float:
+        """Multiply two numbers."""
+        return a * b
+        
+    def percentage(value: float, total: float) -> float:
+        """Calculate percentage of value relative to total."""
+        return (value / total) * 100
 ---
 # Echo Tool Server (for demonstration)
 apiVersion: kaos.tools/v1alpha1
@@ -329,18 +364,20 @@ metadata:
   name: echo-search
   namespace: kaos-hierarchy
 spec:
-  type: python-runtime
-  config:
-    tools:
-      fromString: |
-        def web_search(query: str) -> str:
-            """Simulate a web search with the given query."""
-            return f"Search results for: {query}. [Simulated results: Found 3 relevant articles about {query}]"
-            
-        def echo(message: str) -> str:
-            """Echo back the message for testing."""
-            return f"Echo: {message}"
+  runtime: python-string
+  params: |
+    def web_search(query: str) -> str:
+        """Simulate a web search with the given query."""
+        return f"Search results for: {query}. [Simulated results: Found 3 relevant articles about {query}]"
+        
+    def echo(message: str) -> str:
+        """Echo back the message for testing."""
+        return f"Echo: {message}"
 ```
+
+Note the simplified CRD structure:
+- `runtime: python-string` specifies the MCP runtime to use
+- `params:` contains the Python functions directly (passed via `MCP_TOOLS_STRING` env var)
 
 Apply and verify:
 
@@ -349,6 +386,21 @@ kubectl apply -f mcpservers.yaml
 kubectl get mcpserver -n kaos-hierarchy
 # Wait for all STATUS: Ready
 ```
+
+<details>
+<summary>📋 Alternative: Using KAOS CLI</summary>
+
+```bash
+# Deploy from YAML
+kaos mcp deploy mcpservers.yaml
+
+# List MCPServers
+kaos mcp list -n kaos-hierarchy
+
+# Invoke a tool directly to test
+kaos mcp invoke calculator -n kaos-hierarchy --tool add --args '{"a": 5, "b": 3}'
+```
+</details>
 
 ### Step 5: Deploy the Agents
 
@@ -378,6 +430,12 @@ spec:
   config:
     description: "Research specialist with web search capabilities"
     instructions: "You research topics using web search and provide detailed findings."
+    reasoningLoopMaxSteps: 5
+  # Optional: container-level overrides
+  container:
+    env:
+    - name: LOG_LEVEL
+      value: "DEBUG"
   agentNetwork:
     expose: true
 ```
@@ -394,6 +452,21 @@ kubectl apply -f researcher.yaml
 kubectl get agent researcher -n kaos-hierarchy
 # Wait for STATUS: Ready
 ```
+
+<details>
+<summary>📋 Alternative: Using KAOS CLI</summary>
+
+```bash
+# Deploy from YAML
+kaos agent deploy researcher.yaml
+
+# List agents
+kaos agent list -n kaos-hierarchy
+
+# View logs
+kaos agent logs researcher -n kaos-hierarchy --follow
+```
+</details>
 
 #### 5b. The Analyst Agent
 
@@ -446,6 +519,7 @@ spec:
       - Research questions → researcher agent
       - Calculations or analysis → analyst agent
       Synthesize responses from specialists into a final answer.
+    reasoningLoopMaxSteps: 10  # More steps for multi-agent coordination
   agentNetwork:
     expose: true
     access:
@@ -459,6 +533,20 @@ kubectl get agent -n kaos-hierarchy
 # All three agents should show STATUS: Ready
 ```
 
+<details>
+<summary>📋 Alternative: Using KAOS CLI to invoke agents</summary>
+
+```bash
+# Invoke an agent directly
+kaos agent invoke coordinator -n kaos-hierarchy \
+  --message "Research the current AI chip market and calculate the market share"
+
+# Stream the response
+kaos agent invoke coordinator -n kaos-hierarchy \
+  --message "What is 15% of 200?" --stream
+```
+</details>
+
 ---
 
 ## Putting It All Together: Monitoring KAOS
@@ -468,6 +556,14 @@ Now let's generate some traffic and see what observability gives us.
 ### Interacting with Agents
 
 You can interact with agents in multiple ways:
+
+**Using the KAOS CLI** (quick invocation):
+
+```bash
+# Invoke the coordinator agent directly
+kaos agent invoke coordinator -n kaos-hierarchy \
+  --message "Research the current AI chip market and calculate the market share of the top 3 companies."
+```
 
 **Using the KAOS UI** (recommended for visualization):
 
