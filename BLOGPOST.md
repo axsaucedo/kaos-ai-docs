@@ -989,9 +989,48 @@ The patterns we've covered apply to any agentic system, not just KAOS. Start ins
 
 ---
 
+## Quick Reference: KAOS CLI Commands
+
+Here's a summary of the KAOS CLI commands used in this tutorial:
+
+```bash
+# Installation
+pip install kaos-cli
+
+# System management
+kaos system install --wait          # Install KAOS operator
+kaos system status                  # Check operator status
+kaos system runtimes                # List available MCP runtimes
+
+# MCPServer management
+kaos mcp deploy mcpserver.yaml      # Deploy from YAML
+kaos mcp list -n <namespace>        # List MCPServers
+kaos mcp get <name>                 # Get details
+kaos mcp logs <name>                # View logs
+kaos mcp invoke <name> --tool <tool> --args '{}'  # Invoke a tool
+
+# Agent management  
+kaos agent deploy agent.yaml        # Deploy from YAML
+kaos agent list -n <namespace>      # List Agents
+kaos agent get <name>               # Get details
+kaos agent logs <name> --follow     # View logs
+kaos agent invoke <name> --message "Hello"  # Send a message
+
+# ModelAPI management
+kaos modelapi deploy modelapi.yaml  # Deploy from YAML
+kaos modelapi list -n <namespace>   # List ModelAPIs
+kaos modelapi logs <name>           # View logs
+
+# UI
+kaos ui                             # Launch web UI
+```
+
+---
+
 ## Resources
 
 - **KAOS Framework**: [github.com/axsaucedo/kaos](https://github.com/axsaucedo/kaos) - The open-source framework used in this article
+- **KAOS Documentation**: [axsaucedo.github.io/kaos](https://axsaucedo.github.io/kaos) - Full CLI and CRD documentation
 - **OpenTelemetry Python**: [opentelemetry.io/docs/languages/python](https://opentelemetry.io/docs/languages/python/) - Official Python SDK documentation
 - **OpenTelemetry GenAI Conventions**: [github.com/open-telemetry/semantic-conventions](https://github.com/open-telemetry/semantic-conventions) - Emerging standards for AI observability
 - **SigNoz**: [signoz.io](https://signoz.io/) - Open-source APM with native OpenTelemetry support
