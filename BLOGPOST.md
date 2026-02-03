@@ -32,7 +32,7 @@ Agentic systems break all of these assumptions:
 | Single service per request | Model calls + tool calls + delegations |
 | Fixed cost per request | Cost varies by token usage |
 
-Consider the core loop of an AI agent—the deceptively simple pattern that has led to the current wave of innovation in AI systems:
+Consider the core loop of a multi-AI agent system — the deceptively simple pattern that has led to the current wave of innovation in AI systems:
 
 ```python
 async def process_message(self, messages):
@@ -169,16 +169,17 @@ graph TB
 
 Each component—agents, tools, and model APIs—sends traces, metrics, and logs to an OpenTelemetry collector, which forwards everything to your chosen backend for visualization and analysis.
 
-### Prerequisites
+### Prerequisites: Command Tools
 
 Before we start, you'll need:
 
+1. **KAOS CLI** installed: `pip install kaos-cli==0.2.1`
+1. **An LLM API key** (Any provider like OpenAI, Nebius, etc)
+1. **kubectl** configured with cluster access
+1. **helm** configured with cluster access
 1. **A Kubernetes cluster** (KIND, minikube, or a cloud cluster)
-2. **kubectl** configured with cluster access
-3. **An LLM API key** (OpenAI or Nebius)
-4. **KAOS CLI** installed: `pip install kaos-cli`
 
-### Step 1: Install KAOS with Telemetry Enabled
+### Pre-requisites: Setup
 
 First, let's install the KAOS operator with OpenTelemetry enabled and an observability backend. We'll use SigNoz as an open-source, OpenTelemetry-native option.
 
@@ -186,22 +187,25 @@ First, let's install the KAOS operator with OpenTelemetry enabled and an observa
 
 ```bash
 # Install the KAOS operator
-kaos system install --wait
+kaos system install \
+    --set logLevel=DEBUG \
+    --monitoring-enabled # Enables monitoring setup
 
 # Verify the installation
 kaos system status
+
+# Change context to use (+create) this current namespace for convenience
+kaos system working-namespace kaos-hierarchy
 ```
 
-The CLI wraps the Helm installation and provides a simpler interface. After installation, you can check available MCP runtimes:
+You can also setup access to the UI as follows, where you will see the KAOS installation as well as all the resources that will be created throughout.
 
-```bash
-kaos system runtimes
 ```
-
-This shows the registered runtimes like `python-string`, `kubernetes`, `slack`, and `custom`.
+kaos ui --monitoring-enabled
+```
 
 <details>
-<summary>📋 Alternative: Using Helm directly</summary>
+<summary> Install using Helm directly</summary>
 
 ```bash
 # Create namespace
@@ -210,52 +214,79 @@ kubectl create namespace kaos-system
 # Install KAOS with telemetry enabled
 helm repo add kaos https://axsaucedo.github.io/kaos
 helm install kaos kaos/kaos \
-  --namespace kaos-system \
-  --set logLevel=DEBUG \
-  --set telemetry.enabled=true \
-  --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
+    --version v0.2.1
+    --set logLevel=DEBUG \
+    --set telemetry.enabled=true \
+    --set telemetry.endpoint="http://signoz-otel-collector.observability:4317"
+    --namespace kaos-system \
+```
+
+We also set up the working namespace.
+
+```bash
+kubectl create namespace kaos-hierarchy
+```
+
+We then set the namespace as the default to simplify commands.
+
+```bash
+export KUBECTL_NAMESPACE=kaos-hierarchy
 ```
 </details>
 
 Now let's install SigNoz for observability:
 
 ```bash
-# Create observability namespace
-kubectl create namespace observability
-kubectl create namespace kaos-hierarchy
-
 # Install SigNoz (OpenTelemetry-native observability backend)
 helm repo add signoz https://charts.signoz.io
-helm install signoz signoz/signoz --namespace observability
+helm install signoz signoz/signoz --namespace monitoring
 ```
 
-To access the SigNoz UI later, use port-forward:
+## The Agentic System to Monitor
 
-```bash
-kubectl port-forward svc/signoz-frontend -n observability 3301:3301
-# Open http://localhost:3301
-```
+We can now proceed to create the agentic system that we'll be monitoring; we'll be able to create all the respective resources.
 
-### Step 2: Create Your API Key Secret
+We'll show you how you can do this with the UI as well as the CLI.
 
-Create a secret with your LLM provider API key:
-
-```bash
-kubectl create secret generic llm-api-key \
-  --namespace kaos-hierarchy \
-  --from-literal=api-key="your-api-key"
-```
-
-### Step 3: Deploy the ModelAPI
+### Step 1: Deploy the ModelAPI
 
 The **ModelAPI** resource in KAOS provides a unified interface for LLM access. It supports two modes:
 
 - **Proxy Mode**: Routes requests through LiteLLM to external providers (OpenAI, Anthropic, Nebius, etc.)
-- **Hosted Mode**: Runs models locally using Ollama
+- **Hosted Mode**: Pulls models into your cluster (via side-car) and runs it on the server for inference
 
 For observability, the ModelAPI gives us visibility into model call latency, token usage, and error rates—critical metrics for understanding agent performance and controlling costs.
 
+The ModelAPI can be deployed easily via CLI. 
+
+```bash
+kaos modelapi deploy llm-proxy \
+    --namespace kaos-hierarchy \
+    --provider nebius \
+    --api-key # When provided without value this prompts the key securely
+```
+
+Note that in order for our agents to use the model APIs we need to provide our authentication API Key. You can use one of the many providers like OpenAI, Nebius, or if preferred you can run your own hosted model.
+
+Creating ModelAPI via UI:
+
+![](TODO: modelapi deploy)
+
+<details>
+<summary>Using `kubectl` directly</summary>
+
+We can then create the secret directly.
+
+```bash
+kubectl create secret generic llm-api-key \
+  --from-literal=api-key="your-api-key"
+```
+</details>
+
+Create the modelapi.yaml.
+
 ```yaml
+# modelapi.yaml
 apiVersion: kaos.tools/v1alpha1
 kind: ModelAPI
 metadata:
@@ -269,74 +300,84 @@ spec:
     apiKeySecretRef:
       name: llm-api-key
       key: api-key
-  # Optional: container-level overrides
-  container:
-    env:
-    - name: LITELLM_LOG
-      value: "DEBUG"
 ```
 
-Apply and verify:
+And apply the resources.
 
 ```bash
 kubectl apply -f modelapi.yaml
 kubectl get modelapi -n kaos-hierarchy
 # Wait for STATUS: Ready
 ```
-
-<details>
-<summary>📋 Alternative: Using KAOS CLI</summary>
-
-```bash
-# Deploy from YAML
-kaos modelapi deploy modelapi.yaml
-
-# List ModelAPIs
-kaos modelapi list -n kaos-hierarchy
-
-# View logs
-kaos modelapi logs llm-proxy -n kaos-hierarchy
-```
 </details>
 
-<details>
-<summary>📋 Using Nebius or other OpenAI-compatible providers</summary>
 
-```yaml
-apiVersion: kaos.tools/v1alpha1
-kind: ModelAPI
-metadata:
-  name: llm-proxy
-  namespace: kaos-hierarchy
-spec:
-  mode: Proxy
-  proxyConfig:
-    models: ["*"]
-    provider: openai
-    apiBase: https://api.studio.nebius.com/v1  # Custom API base
-    apiKeySecretRef:
-      name: llm-api-key
-      key: api-key
-```
-</details>
+### Step 2: Deploy the MCP Tool Servers
 
-### Step 4: Deploy the MCP Tool Servers
+**MCP (Model Context Protocol) Servers** in KAOS provide tools that agents can use. 
 
-**MCP (Model Context Protocol) Servers** in KAOS provide tools that agents can use. MCP is an open standard for tool integration, allowing agents to interact with external systems through a consistent interface.
+KAOS enables FastMCP native servers with ability to create and deploy your own images.
 
-KAOS supports multiple MCP runtimes via a ConfigMap-based registry. The most commonly used are:
+KAOS also supports multiple native MCP runtimes via a registry. The most commonly used are:
 
 | Runtime | Description |
 |---------|-------------|
-| `python-string` | Define tools as inline Python functions |
+| `python-string` | Define tools as inline Python functions for testing |
 | `kubernetes` | Kubernetes CRUD operations |
 | `slack` | Slack messaging integration |
 | `custom` | Your own container image |
 
 For our demo, we'll create a calculator server. In production, you'd connect to real APIs, databases, or external services.
 
+We can use the python-string runtime for quick testing; for production-ready deployment use the [custom-image deployment](TODO: add custom image).
+
+```bash
+export ADD_TOOL='
+def add(a: float, b: float) -> float:
+    """Add two numbers together."""
+    return a + b
+'
+
+export ECHO_TOOL='
+def echo(message: str) -> str:
+    """Echo back the message for testing."""
+    return f"Echo: {message}"
+'
+```
+
+And now we can deploy the MCP servers using the runtime:
+
+```bash
+kaos mcp deploy calculator \
+    --runtime python-string \
+    --params $ADD_TOOL \
+    --wait
+
+kaos mcp deploy echo-search \
+    --runtime python-string \
+    --params $ECHO_TOOL \
+    --wait
+```
+
+And we can send a request to test the mcp.
+
+```bash
+# Run 2 + 2 on mcp calculator
+kaos mcp invoke calculator --tool add -a 2 -a 2
+
+# Run echo hello on mcp echo
+kaos mcp invoke echo-search --tool add -a "Hello"
+```
+
+![](TODO: MCP Tool server)
+
+![](TODO: MCP Tool server call)
+
+<details>
+<summary>Using kubectl directly.</summary>
+
 ```yaml
-# Calculator Tool Server
+# mcpservers.yaml
 apiVersion: kaos.tools/v1alpha1
 kind: MCPServer
 metadata:
@@ -348,16 +389,7 @@ spec:
     def add(a: float, b: float) -> float:
         """Add two numbers together."""
         return a + b
-        
-    def multiply(a: float, b: float) -> float:
-        """Multiply two numbers."""
-        return a * b
-        
-    def percentage(value: float, total: float) -> float:
-        """Calculate percentage of value relative to total."""
-        return (value / total) * 100
 ---
-# Echo Tool Server (for demonstration)
 apiVersion: kaos.tools/v1alpha1
 kind: MCPServer
 metadata:
@@ -366,18 +398,10 @@ metadata:
 spec:
   runtime: python-string
   params: |
-    def web_search(query: str) -> str:
-        """Simulate a web search with the given query."""
-        return f"Search results for: {query}. [Simulated results: Found 3 relevant articles about {query}]"
-        
     def echo(message: str) -> str:
         """Echo back the message for testing."""
         return f"Echo: {message}"
 ```
-
-Note the simplified CRD structure:
-- `runtime: python-string` specifies the MCP runtime to use
-- `params:` contains the Python functions directly (passed via `MCP_TOOLS_STRING` env var)
 
 Apply and verify:
 
@@ -387,34 +411,38 @@ kubectl get mcpserver -n kaos-hierarchy
 # Wait for all STATUS: Ready
 ```
 
-<details>
-<summary>📋 Alternative: Using KAOS CLI</summary>
-
-```bash
-# Deploy from YAML
-kaos mcp deploy mcpservers.yaml
-
-# List MCPServers
-kaos mcp list -n kaos-hierarchy
-
-# Invoke a tool directly to test
-kaos mcp invoke calculator -n kaos-hierarchy --tool add --args '{"a": 5, "b": 3}'
-```
 </details>
 
-### Step 5: Deploy the Agents
+### Step 3: Deploy the Agents
 
 Now let's deploy our multi-agent system. We'll build progressively:
 
-#### 5a. The Researcher Agent
+#### 3a. The Researcher Agent
 
 The **Agent** resource in KAOS represents an AI entity that can process requests, call models, execute tools, and delegate to other agents. Each agent:
 
 - Exposes an OpenAI-compatible `/v1/chat/completions` endpoint
-- Implements the agentic loop (model → tools → model → ...)
+- Implements the agentic loop (model > tools > model > ...)
 - Supports configurable memory for session state
 
-The Researcher agent specializes in gathering information:
+The Researcher agent will specialise in gathering information:
+
+```bash
+kaos agent deploy researcher \
+    --model "openai/gpt-4o" \
+    --mcp echo-search \
+    --description "Research specialist with web search capabilities" \
+    --instructions "You research topics using web search and provide detailed findings." \
+    --expose=true \
+    --wait
+```
+
+Creating agent with the UI:
+
+![](TODO create agent)
+
+<details>
+<summary>Using `kubectl` directly.</summary>
 
 ```yaml
 apiVersion: kaos.tools/v1alpha1
@@ -430,15 +458,10 @@ spec:
   config:
     description: "Research specialist with web search capabilities"
     instructions: "You research topics using web search and provide detailed findings."
-    reasoningLoopMaxSteps: 5
-  # Optional: container-level overrides
-  container:
-    env:
-    - name: LOG_LEVEL
-      value: "DEBUG"
   agentNetwork:
     expose: true
 ```
+</details>
 
 For single-agent observability, we care about:
 - **Model call latency**: How long does inference take?
@@ -453,24 +476,22 @@ kubectl get agent researcher -n kaos-hierarchy
 # Wait for STATUS: Ready
 ```
 
-<details>
-<summary>📋 Alternative: Using KAOS CLI</summary>
-
-```bash
-# Deploy from YAML
-kaos agent deploy researcher.yaml
-
-# List agents
-kaos agent list -n kaos-hierarchy
-
-# View logs
-kaos agent logs researcher -n kaos-hierarchy --follow
-```
-</details>
-
-#### 5b. The Analyst Agent
+#### 3b. The Analyst Agent
 
 The Analyst agent focuses on data analysis and calculations:
+
+```bash
+kaos agent deploy researcher \
+    --model "openai/gpt-4o" \
+    --mcp calculator \
+    --description "Data analyst with calculation capabilities" \
+    --instructions "You analyze data and perform calculations." \
+    --expose=true \
+    --wait
+```
+
+<details>
+<summary>Using `kubectl` directly.</summary>
 
 ```yaml
 apiVersion: kaos.tools/v1alpha1
@@ -494,14 +515,28 @@ spec:
 kubectl apply -f analyst.yaml
 kubectl get agent analyst -n kaos-hierarchy
 ```
+</details>
 
-#### 5c. The Coordinator Agent
+#### 3c. The Coordinator Agent
 
 Finally, the Coordinator orchestrates the other agents. For multi-agent observability, we gain additional concerns:
 
 - **Delegation patterns**: Which agents are called and how often?
 - **Cross-agent latency**: How much time is spent in delegation vs. local processing?
 - **Trace correlation**: Can we see the full request flow across agents?
+
+```bash
+kaos agent deploy researcher \
+    --model "openai/gpt-4o" \
+    --description "Coordinator that delegates to specialist agents" \
+    --instructions "You are a coordinator. Analyze user requests and delegate to your analyst and researcher." \
+    --sub-agent researcher \
+    --sub-agent analyst \
+    --wait
+```
+
+<details>
+<summary>Using `kubectl` directly.</summary>
 
 ```yaml
 apiVersion: kaos.tools/v1alpha1
@@ -515,11 +550,7 @@ spec:
   config:
     description: "Coordinator that delegates to specialist agents"
     instructions: |
-      You are a coordinator. Analyze user requests and delegate:
-      - Research questions → researcher agent
-      - Calculations or analysis → analyst agent
-      Synthesize responses from specialists into a final answer.
-    reasoningLoopMaxSteps: 10  # More steps for multi-agent coordination
+      You are a coordinator. Analyze user requests and delegate to your analyst and researcher.
   agentNetwork:
     expose: true
     access:
@@ -531,19 +562,6 @@ spec:
 kubectl apply -f coordinator.yaml
 kubectl get agent -n kaos-hierarchy
 # All three agents should show STATUS: Ready
-```
-
-<details>
-<summary>📋 Alternative: Using KAOS CLI to invoke agents</summary>
-
-```bash
-# Invoke an agent directly
-kaos agent invoke coordinator -n kaos-hierarchy \
-  --message "Research the current AI chip market and calculate the market share"
-
-# Stream the response
-kaos agent invoke coordinator -n kaos-hierarchy \
-  --message "What is 15% of 200?" --stream
 ```
 </details>
 
@@ -557,35 +575,28 @@ Now let's generate some traffic and see what observability gives us.
 
 You can interact with agents in multiple ways:
 
-**Using the KAOS CLI** (quick invocation):
-
 ```bash
 # Invoke the coordinator agent directly
-kaos agent invoke coordinator -n kaos-hierarchy \
+kaos agent invoke coordinator \
   --message "Research the current AI chip market and calculate the market share of the top 3 companies."
 ```
 
-**Using the KAOS UI** (recommended for visualization):
-
-```bash
-# Run the KAOS UI locally
-kaos ui
-# Opens http://localhost:5173
-```
+Activating the Chat through the User Interface:
 
 ![KAOS UI Home - showing deployed agents](images/1-kaos-ui-home.png)
 
-*The KAOS UI displays all deployed agents with their status, model configuration, and available tools.*
+
+<details>
+<summary>Or example kubectl curl request.</summary>
 
 **Using kubectl port-forward** (for direct API access):
 
 ```bash
-kubectl port-forward svc/coordinator -n kaos-hierarchy 8080:80
+kubectl port-forward svc/coordinator 8080:80
 # Then use curl or any HTTP client
 ```
 
-<details>
-<summary>📋 Example curl request</summary>
+Then send request.
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -598,14 +609,6 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 ```
 </details>
 
-### Sending a Request
-
-From the KAOS UI, click on the coordinator agent and send a message:
-
-![Sending a message through KAOS UI](images/2-kaos-send-message.png)
-
-*Sending a multi-step research request: "Research the current AI chip market and calculate the market share of the top 3 companies."*
-
 Behind the scenes, this triggers a complex chain of operations:
 1. Coordinator receives the request
 2. Coordinator calls the LLM, which decides to delegate
@@ -617,11 +620,10 @@ All of this—every LLM call, every tool execution, every delegation—is captur
 
 ### Viewing Traces: Understanding Request Flow
 
-Access your OpenTelemetry backend (SigNoz in this example):
+For this section we will be using the UI; if you haven't opened it, you can do so via:
 
 ```bash
-kubectl port-forward svc/signoz-frontend -n observability 3301:3301
-# Open http://localhost:3301 and navigate to Traces
+kaos ui --monitoring-enabled
 ```
 
 **Why traces matter for agentic systems**: Unlike traditional request-response services, agents make multiple decisions per request. Traces let you see each decision point, how long it took, and what path the agent chose.
@@ -989,43 +991,6 @@ The patterns we've covered apply to any agentic system, not just KAOS. Start ins
 
 ---
 
-## Quick Reference: KAOS CLI Commands
-
-Here's a summary of the KAOS CLI commands used in this tutorial:
-
-```bash
-# Installation
-pip install kaos-cli
-
-# System management
-kaos system install --wait          # Install KAOS operator
-kaos system status                  # Check operator status
-kaos system runtimes                # List available MCP runtimes
-
-# MCPServer management
-kaos mcp deploy mcpserver.yaml      # Deploy from YAML
-kaos mcp list -n <namespace>        # List MCPServers
-kaos mcp get <name>                 # Get details
-kaos mcp logs <name>                # View logs
-kaos mcp invoke <name> --tool <tool> --args '{}'  # Invoke a tool
-
-# Agent management  
-kaos agent deploy agent.yaml        # Deploy from YAML
-kaos agent list -n <namespace>      # List Agents
-kaos agent get <name>               # Get details
-kaos agent logs <name> --follow     # View logs
-kaos agent invoke <name> --message "Hello"  # Send a message
-
-# ModelAPI management
-kaos modelapi deploy modelapi.yaml  # Deploy from YAML
-kaos modelapi list -n <namespace>   # List ModelAPIs
-kaos modelapi logs <name>           # View logs
-
-# UI
-kaos ui                             # Launch web UI
-```
-
----
 
 ## Resources
 
