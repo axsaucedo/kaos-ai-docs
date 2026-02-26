@@ -4,15 +4,23 @@
 
 ---
 
-You've built an AI agent that works beautifully in development. It chains tools together, delegates tasks to specialist sub-agents, and produces impressive results. Then you deploy it to production.
+You've built an AI agent that works in your laptop. It automatically chains tools together, delegates tasks to specialist sub-agents, and produces sound results.
 
-A user reports that a request "took forever." Another says they got a strange response. Your logs show the agent ran—but what happened inside those 45 seconds between request and response?
+Then you deploy it to production.
+
+A user reports that a request "took forever".
+
+Another says they got a strange response.
+
+Your logs show the agent ran—but what happened inside those 45 seconds between request and response?
 
 Welcome to the observability challenge of agentic systems.
 
-In this article, I'll walk you through a complete end-to-end example of observability for agentic AI systems using OpenTelemetry with KAOS, the Kubernetes Agent Orchestration System.
+In this article, we'll walk you through a complete end-to-end example of observability for agentic AI systems using OpenTelemetry.
 
-We'll start with a working demo you can run yourself, visualize traces flowing through a multi-agent system, and then dive deep into the technical challenges of making AI agents observable. By the end, you will leave with the OTEL knowledge to extend your own code with agentic observability.
+We'll start by talking about the motivation of observability in agentic systems, then we'll set up a multi-agent system using the OSS Kubernetes Agent Orchestration System (KAOS), and then we'll trigger a complex workflow that will allow us to diagnose and dive into the OTEL metrics from the system.
+
+Below is a preview of what we'll have by the end of this blog post;  this will include step-by-step instructions via the UI or CLI.
 
 ![](output.gif)
 
@@ -32,6 +40,8 @@ Agentic systems break all of these assumptions:
 | Single service per request | Model calls + tool calls + delegations |
 | Fixed cost per request | Cost varies by token usage |
 
+**AI Agents 101: The Agentic Loop**
+
 Consider the core loop of a multi-AI agent system — the deceptively simple pattern that has led to the current wave of innovation in AI systems:
 
 ```python
@@ -39,24 +49,28 @@ async def process_message(self, messages):
     for step in range(self.max_steps):
         # 1. Call the LLM
         response = await self.model.chat(messages)
-        
+
         # 2. If the model wants to use a tool, execute it
         if response.has_tool_call:
             result = await self.execute_tool(response.tool_call)
             messages.append({"role": "tool", "content": result})
             continue
-        
+
         # 3. If the model wants to delegate, call another agent
         if response.needs_delegation:
             result = await self.delegate_to_agent(response.delegation)
             messages.append({"role": "assistant", "content": result})
             continue
-        
+
         # 4. Otherwise, we have our final answer
         return response.content
 ```
 
-Each iteration of this loop may take a different path. The model might need one tool call or five. It might delegate to one sub-agent or chain through three. Traditional logging—"request started," "request completed"—tells you almost nothing about what actually happened.
+Each iteration of this loop may take a different path. The model might need one tool call or five. 
+
+It might delegate to one sub-agent or chain through three. Traditional logging (e.g. "request started" ... "request completed") tells you almost nothing about what actually happened.
+
+And once we take this into a distributed system it gets even more complex to understand what is going on - as we will see in this post.
 
 ### The Three Pillars of Agent Observability
 
@@ -66,31 +80,17 @@ OpenTelemetry provides three types of telemetry data, each serving a distinct pu
 
 ```
 HTTP POST /v1/chat/completions (15.2s total)
-└── agent.agentic_loop
-    ├── agent.step.1 (3.1s)
-    │   └── model.inference (3.0s)
-    ├── agent.step.2 (8.5s)
-    │   ├── model.inference (2.1s)
-    │   └── tool.web_search (6.3s)   ← Here's your bottleneck
-    └── agent.step.3 (3.4s)
-        └── model.inference (3.3s)
+-> agent.agentic_loop
+    -> agent.step.1 (3.1s)
+        -> model.inference (3.0s)
+    -> agent.step.2 (8.5s)
+        ->model.inference (2.1s)
+        -> tool.web_search (6.3s)   <- Here may be your bottleneck
+    -> agent.step.3 (3.4s)
+        -> model.inference (3.3s)
 ```
 
-This trace hierarchy maps directly to what the agent did:
-
-```
-agent.agentic_loop (session_id=abc123, agent.name=coordinator)
-├── agent.step.1
-│   └── model.inference (gen_ai.request.model=gpt-4)
-├── agent.step.2
-│   ├── model.inference
-│   └── tool.web_search (tool.name=web_search)
-├── agent.step.3
-│   ├── model.inference
-│   └── delegate.researcher (agent.delegation.target=researcher)
-└── agent.step.4
-    └── model.inference
-```
+This trace hierarchy maps directly to what the agent did, capturing and connecting every hop across the journey.
 
 **Metrics** answer: "How is my system performing overall?"
 
@@ -106,7 +106,9 @@ agent.agentic_loop (session_id=abc123, agent.name=coordinator)
 2024-01-15 10:30:53 ERROR [trace_id=abc123] Tool execution failed: API rate limited
 ```
 
-The magic happens when these three are correlated. Click on that ERROR log in your observability backend, and it takes you to the exact span in the trace where the failure occurred.
+The magic happens when these three are correlated (aka connected).
+
+This allows us to do things like "click on that ERROR log in your observability backend" and diagnose the exact span in the trace where the failure occurred.
 
 ### Multi-Agent Context Propagation
 
@@ -116,25 +118,37 @@ This requires **context propagation**: passing trace context through HTTP header
 
 ```
 coordinator.agent.agentic_loop (trace_id: abc123)
-├── coordinator.model.inference
-├── coordinator.delegate.researcher
-│   └── researcher.agent.agentic_loop (same trace_id: abc123!)
-│       ├── researcher.model.inference
-│       └── researcher.tool.web_search
-├── coordinator.model.inference
-└── coordinator.delegate.analyst
-    └── analyst.agent.agentic_loop (same trace_id: abc123!)
-        ├── analyst.model.inference
-        └── analyst.tool.calculator
+	-> coordinator.model.inference
+	-> coordinator.delegate.researcher
+	    -> researcher.agent.agentic_loop (trace_id: abc123)
+	        -> researcher.model.inference
+	        -> researcher.tool.web_search
+	-> coordinator.model.inference
+	-> coordinator.delegate.analyst
+	    -> analyst.agent.agentic_loop (trace_id: abc123)
+	        -> analyst.model.inference
+	        -> analyst.tool.calculator
 ```
 
 ## The Practical Use-Case: A Multi-Agent Research System
 
-Let's start with something concrete. We'll use **KAOS** (Kubernetes Agent Orchestration System), an open-source framework I've been building that treats AI agents as first-class Kubernetes resources.
+Let's now start building something concrete.
+
+We'll use [**KAOS** (Kubernetes Agent Orchestration System)](https://github.com/axsaucedo/kaos), an open-source framework that treats AI agents as first-class Kubernetes resources.
 
 ### What We're Building
 
 Our use-case consists of a coordinator agent that delegates research and analysis tasks to specialist sub-agents:
+
+```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart TD
+  Start --> Stop
+```
 
 ```mermaid
 graph TB
@@ -189,19 +203,15 @@ First, let's install the KAOS operator with OpenTelemetry enabled and an observa
 # Install the KAOS operator
 kaos system install \
     --set logLevel=DEBUG \
-    --monitoring-enabled # Enables monitoring setup
+    --wait \
+    --monitoring-enabled # Enables monitoring setup \
+
 
 # Verify the installation
 kaos system status
 
 # Change context to use (+create) this current namespace for convenience
 kaos system working-namespace kaos-hierarchy
-```
-
-You can also setup access to the UI as follows, where you will see the KAOS installation as well as all the resources that will be created throughout.
-
-```
-kaos ui --monitoring-enabled
 ```
 
 <details>
@@ -234,30 +244,32 @@ export KUBECTL_NAMESPACE=kaos-hierarchy
 ```
 </details>
 
-Now let's install SigNoz for observability:
+As part of this tutorial we will walk through all the steps using both the UI and the CLI.
 
-```bash
-# Install SigNoz (OpenTelemetry-native observability backend)
-helm repo add signoz https://charts.signoz.io
-helm install signoz signoz/signoz --namespace monitoring
+You can open the UI with the following command.
+
+```
+kaos ui --monitoring-enabled
 ```
 
-## The Agentic System to Monitor
+![](TODO Add image of system section of kaos ui)
+
+## Creating the Multi-Agent System
 
 We can now proceed to create the agentic system that we'll be monitoring; we'll be able to create all the respective resources.
 
 We'll show you how you can do this with the UI as well as the CLI.
 
-### Step 1: Deploy the ModelAPI
+### Step 1: We first connect to LLMs with a ModelAPI
 
 The **ModelAPI** resource in KAOS provides a unified interface for LLM access. It supports two modes:
 
 - **Proxy Mode**: Routes requests through LiteLLM to external providers (OpenAI, Anthropic, Nebius, etc.)
 - **Hosted Mode**: Pulls models into your cluster (via side-car) and runs it on the server for inference
 
-For observability, the ModelAPI gives us visibility into model call latency, token usage, and error rates—critical metrics for understanding agent performance and controlling costs.
-
 The ModelAPI can be deployed easily via CLI. 
+
+> Note that in order for our agents to use the model APIs we need to provide our authentication API Key. For this example we will be using [Nebius](https://nebius.com/services/token-factory) as it's easy to set up, but you can also set up OpenAI, Gemini and dozen others.
 
 ```bash
 kaos modelapi deploy llm-proxy \
@@ -266,14 +278,14 @@ kaos modelapi deploy llm-proxy \
     --api-key # When provided without value this prompts the key securely
 ```
 
-Note that in order for our agents to use the model APIs we need to provide our authentication API Key. You can use one of the many providers like OpenAI, Nebius, or if preferred you can run your own hosted model.
+From an observability perspective, the ModelAPI gives us visibility into model call latency, token usage, and error rates—critical metrics for understanding agent performance and controlling costs.
 
 Creating ModelAPI via UI:
 
-![](TODO: modelapi deploy)
+![](TODO modelapi deploy)
 
 <details>
-<summary>Using `kubectl` directly</summary>
+<summary>Using kubectl directly</summary>
 
 We can then create the secret directly.
 
@@ -281,7 +293,6 @@ We can then create the secret directly.
 kubectl create secret generic llm-api-key \
   --from-literal=api-key="your-api-key"
 ```
-</details>
 
 Create the modelapi.yaml.
 
@@ -311,7 +322,6 @@ kubectl get modelapi -n kaos-hierarchy
 ```
 </details>
 
-
 ### Step 2: Deploy the MCP Tool Servers
 
 **MCP (Model Context Protocol) Servers** in KAOS provide tools that agents can use. 
@@ -329,7 +339,9 @@ KAOS also supports multiple native MCP runtimes via a registry. The most commonl
 
 For our demo, we'll create a calculator server. In production, you'd connect to real APIs, databases, or external services.
 
-We can use the python-string runtime for quick testing; for production-ready deployment use the [custom-image deployment](TODO: add custom image).
+> Note: In this section we use the `python-string runtime` for quick testing, however for production-ready deployment use the [custom-image deployment](https://axsaucedo.github.io/kaos/v0.2.3/examples/custom-mcp-server.html).
+
+First we create the `calculator` mcp, which will have a simple `add` tool that will add two numbers and return the result.
 
 ```bash
 export ADD_TOOL='
@@ -338,20 +350,20 @@ def add(a: float, b: float) -> float:
     return a + b
 '
 
+kaos mcp deploy calculator \
+    --runtime python-string \
+    --params $ADD_TOOL \
+    --wait
+```
+
+And we then create an `echo`mcp, which is also a simple tool that receives a string and returns the same value as the string.
+
+```bash
 export ECHO_TOOL='
 def echo(message: str) -> str:
     """Echo back the message for testing."""
     return f"Echo: {message}"
 '
-```
-
-And now we can deploy the MCP servers using the runtime:
-
-```bash
-kaos mcp deploy calculator \
-    --runtime python-string \
-    --params $ADD_TOOL \
-    --wait
 
 kaos mcp deploy echo-search \
     --runtime python-string \
@@ -359,19 +371,26 @@ kaos mcp deploy echo-search \
     --wait
 ```
 
+![](TODO MCP Tool server)
+
 And we can send a request to test the mcp.
 
 ```bash
 # Run 2 + 2 on mcp calculator
-kaos mcp invoke calculator --tool add -a 2 -a 2
+kaos mcp invoke calculator \
+	--tool add \
+	-a 2 \
+	-a 2
 
 # Run echo hello on mcp echo
-kaos mcp invoke echo-search --tool add -a "Hello"
+kaos mcp invoke echo-search \
+	--tool add \
+	-a "Hello"
 ```
 
-![](TODO: MCP Tool server)
+Similarly we can do it via the UI.
 
-![](TODO: MCP Tool server call)
+![](TODO MCP Tool server call)
 
 <details>
 <summary>Using kubectl directly.</summary>
@@ -408,15 +427,17 @@ Apply and verify:
 ```bash
 kubectl apply -f mcpservers.yaml
 kubectl get mcpserver -n kaos-hierarchy
-# Wait for all STATUS: Ready
 ```
 
 </details>
 
+From an observability standpoint we will show how it is important to understand the calls that are sent by any agent (or any external service) and processed by the MCP servers themselves
+
 ### Step 3: Deploy the Agents
 
-Now let's deploy our multi-agent system. We'll build progressively:
+Now let's deploy our multi-agent system.
 
+We'll build these progressively.
 #### 3a. The Researcher Agent
 
 The **Agent** resource in KAOS represents an AI entity that can process requests, call models, execute tools, and delegate to other agents. Each agent:
@@ -461,12 +482,6 @@ spec:
   agentNetwork:
     expose: true
 ```
-</details>
-
-For single-agent observability, we care about:
-- **Model call latency**: How long does inference take?
-- **Tool execution time**: Are tools responding quickly?
-- **Step count**: How many iterations does the agent need?
 
 Apply and verify:
 
@@ -475,6 +490,13 @@ kubectl apply -f researcher.yaml
 kubectl get agent researcher -n kaos-hierarchy
 # Wait for STATUS: Ready
 ```
+
+</details>
+
+For single-agent observability, we care about:
+- **Model call latency**: How long does inference take?
+- **Tool execution time**: Are tools responding quickly?
+- **Step count**: How many iterations does the agent need?
 
 #### 3b. The Analyst Agent
 
@@ -583,8 +605,7 @@ kaos agent invoke coordinator \
 
 Activating the Chat through the User Interface:
 
-![KAOS UI Home - showing deployed agents](images/1-kaos-ui-home.png)
-
+![](TODO Add chat UI interface)
 
 <details>
 <summary>Or example kubectl curl request.</summary>
@@ -628,8 +649,6 @@ kaos ui --monitoring-enabled
 
 **Why traces matter for agentic systems**: Unlike traditional request-response services, agents make multiple decisions per request. Traces let you see each decision point, how long it took, and what path the agent chose.
 
-![SigNoz Tracing Overview](images/3-signoz-tracing-overview.png)
-
 *The trace list shows all requests flowing through your agents. Each trace represents a complete user interaction.*
 
 Click on a trace to see the full request flow:
@@ -654,9 +673,9 @@ Every log entry includes these identifiers, enabling you to:
 2. View all logs emitted during that span
 3. Understand the agent's reasoning at each step
 
-Click on a span and select "View Logs":
+It is possible to see the view of the logs themselves as well as further details.
 
-![SigNoz Logs for Trace](images/4-signoz-logs-for-trace.png)
+![](TODO View logs)
 
 *Logs filtered by trace_id, showing exactly what happened during this span.*
 
