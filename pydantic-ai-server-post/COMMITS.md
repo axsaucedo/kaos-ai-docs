@@ -1,0 +1,1586 @@
+# COMMITS.md — Filtered Commit List
+
+## Scope
+
+- **Branch:** `feat/exploration-pydantic-ai`
+- **Total commits in range:** 102
+- **After filtering:** 93
+- **Range:** `e8e26a2` → `5b28a69`
+
+## Filtering Logic
+
+Excluded commits:
+- CI-only pipeline fixes (custom-agent image build steps)
+- Notebook-only regeneration (no content changes)
+- Pure chore/cleanup (unused files, unused dependencies)
+- Reverted work (per-tool OTEL spans: added then immediately reverted)
+
+---
+
+## Commits (chronological order)
+
+### 1. `e8e26a2`
+
+```
+Hash: e8e26a228e1202ee98fc2ab0e21e86c0a50a000d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 17:42:48 +0100
+
+Subject: feat(framework): add pydantic-ai dependencies and research documents
+
+Replace litellm and fastmcp with pydantic-ai and fasta2a in
+pyproject.toml. Add REPORT-RESEARCH.md with codebase analysis and
+Pydantic AI capability mapping, ROADMAP.md with 59 features across
+11 categories, and PLAN.md with 12 incremental implementation tasks.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 2. `c544569`
+
+```
+Hash: c5445692fb2a4e108ea2abe1cca0a572ab03e7ec
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:03:53 +0100
+
+Subject: feat(framework): replace agent core with pydantic-ai
+
+Replace custom two-phase agentic loop with Pydantic AI Agent wrapper.
+Key changes:
+- Agent class wraps pydantic_ai.Agent with KAOS memory, delegation, telemetry
+- FunctionModel-based mock handler for DEBUG_MOCK_RESPONSES (closure state)
+- Sub-agent delegation registered as delegate_to_{name} tool functions
+- Memory bridge converts KAOS events to/from Pydantic AI message_history
+- MCP servers via MCPServerStreamableHTTP in toolsets parameter
+- Removed litellm/fastmcp deps, removed custom ToolCall/ModelResponse classes
+- Rewritten test_agent.py (23 tests) and test_agentic_loop.py (28 tests)
+- All 51 tests pass, lint clean (black + ty check)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 3. `8f9b07c`
+
+```
+Hash: 8f9b07c49e7c6f8c4874dee24fcdd2c6d9b30b2b
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:06:22 +0100
+
+Subject: fix(framework): use model_config dict for pydantic v2 settings
+
+Replace deprecated class Config with model_config dict in AgentServerSettings.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 4. `fdbd11e`
+
+```
+Hash: fdbd11ee53562cbe23a5d87f031333fcaed571fa
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:07:31 +0100
+
+Subject: build(framework): update dockerfile for pydantic-ai
+
+Remove mcptools/ and modelapi/ COPY steps (modules replaced by pydantic-ai).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 5. `e103a36`
+
+```
+Hash: e103a36bb006ed4270ea1cb258421acc10d00acd
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:52:08 +0100
+
+Subject: test(e2e): validate pydantic-ai framework with kind cluster
+
+- Fix delegation memory events: store delegate_to_* calls as
+  delegation_request/delegation_response instead of tool_call/tool_result
+- Fix task delegation detection: incoming task-delegation role stored as
+  task_delegation_received event
+- Fix agent card skills: discover tools from MCP servers via list_tools()
+  and include delegation tools
+- Fix MCP server URLs: append /mcp path for Streamable HTTP transport
+- Update string-mode E2E test to use tool_calls format (Pydantic AI has
+  no string-mode concept)
+- All E2E suites pass locally: agentic-loop (5/5), mcp-tools (6/6),
+  multi-agent (3/3)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 6. `1051944`
+
+```
+Hash: 10519443324fabddba576528557c5ac6f7312be8
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:54:36 +0100
+
+Subject: docs: update instructions for pydantic-ai framework
+
+- Rewrite python.instructions.md: Pydantic AI architecture, removed
+  string-mode docs, updated mock pattern (2 responses not 3), new env
+  vars, removed mcptools/modelapi references
+- Update e2e.instructions.md: clarify mock response counts, document
+  legacy 3-entry format compatibility, note tool_calls array requirement
+- Update copilot-instructions.md: new project structure reflecting
+  Pydantic AI agent/server/memory layout, updated key files
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 7. `3758b23`
+
+```
+Hash: 3758b232a2fd366da26abcf997ecd2fc25ad94e9
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 18:56:36 +0100
+
+Subject: docs: add pydantic-ai integration final report
+
+Summarizes all 12 implementation tasks, technical decisions, breaking
+changes, test results, deferred features, and files changed.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 8. `5e8e4d8`
+
+```
+Hash: 5e8e4d81ccaa475cad2ee06ab204f9f5a6e9c961
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 19:41:15 +0100
+
+Subject: fix(framework): append /v1 to model api url for openai compatibility
+
+Pydantic AI's OpenAIProvider constructs API URLs as base_url +
+/chat/completions. Ollama serves OpenAI-compatible endpoints at
+/v1/chat/completions, so the base_url must include /v1. LiteLLM
+proxy also supports /v1 prefix. This fixes 404 errors when using
+hosted (Ollama) mode ModelAPI.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 9. `a38c05d`
+
+```
+Hash: a38c05deb0574a144b3736c0eac555e880062f18
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 19:41:40 +0100
+
+Subject: docs: document /v1 auto-append for model api url
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 10. `e07128c`
+
+```
+Hash: e07128c9171bb4d3e08e5d0c1aab73a3c4d08c7e
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 20:08:06 +0100
+
+Subject: fix(framework): update mock response patterns and tool result serialization
+
+- Remove 'No more actions needed.' entries from example mock responses
+  (Pydantic AI uses 2-entry pattern: tool_call + final response)
+- Fix tool_result memory storage to properly serialize JSON objects
+  instead of Python repr strings (enables grep for success: true)
+- Update agentic-loop docs with correct mock response examples
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 11. `e8d141c`
+
+```
+Hash: e8d141c29fd9b621acdc7a17fe50de123dd1c2c4
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 20:40:21 +0100
+
+Subject: fix(framework): address 7 code review bugs in pydantic-ai integration
+
+- Bug 1: Persist tool/delegation memory events in streaming path
+- Bug 2: Replay task_delegation_received events in message history
+- Bug 3: Gate memory reads/writes on memory_enabled flag, enforce
+  memory_context_limit, remove unused seed parameter
+- Bug 4: Replace fragile events[:-1] with explicit prompt exclusion
+- Bug 5: Forward conversation context to sub-agents during delegation
+- Bug 6: Remove dead reset_mock_responses() function
+- Bug 7: Fix max_steps semantics (UsageLimits instead of retries)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 12. `f98cf5f`
+
+```
+Hash: f98cf5fc195b4f93a6cdfb21fdec4db3d4d03b4d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-20 20:41:08 +0100
+
+Subject: docs: update python instructions for bug fix changes
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 13. `bf7b1d4`
+
+```
+Hash: bf7b1d4f24be41f338b45aa2bcbcd1440558da4c
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 08:44:42 +0100
+
+Subject: docs: update python framework docs for pydantic-ai architecture
+
+Rewrite all VitePress documentation to reflect Pydantic AI integration:
+- overview.md: new module structure, mermaid diagram, env var table
+- agent.md: Agent wraps pydantic_ai.Agent, delegation, mock testing
+- agentic-loop.md: Pydantic AI native loop, UsageLimits, 2-entry mocks
+- memory.md: memory bridge, RedisMemory, memory_enabled gating
+- mcp-tools.md: MCPServerStreamableHTTP via Pydantic AI toolsets
+- server.md: updated AgentServerSettings, all endpoints
+- Remove model-api.md (ModelAPI no longer exists as separate module)
+- Remove Model API Client from sidebar in config.ts
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 14. `43b45f7`
+
+```
+Hash: 43b45f7d27632a7ea68c2f7a5703ea6bc6b9c28d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 09:03:08 +0100
+
+Subject: feat(framework): add string-mode tool calling for models without native function calling
+
+Implements StringModeModel wrapper using Pydantic AI FunctionModel that:
+- Injects tool descriptions into system prompt for text-based tool calling
+- Parses JSON tool call responses from model text output
+- Supports single/multiple tool calls and delegation (delegate_to_*)
+- Controlled via TOOL_CALL_MODE env var (auto/native/string)
+- Integrates with AgentServerSettings and K8s operator CRD field
+
+Includes 23 unit tests covering tool description generation, JSON parsing,
+agent integration, and server settings.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 15. `29ca5f9`
+
+```
+Hash: 29ca5f948733f911f443662db1d73270ef12f520
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 09:04:37 +0100
+
+Subject: test(e2e): update string-mode E2E test to use toolCallMode: string CRD field
+
+Sets toolCallMode: string in the Agent CRD spec.config, which the operator
+propagates as TOOL_CALL_MODE env var to the agent container. Validates the
+full stack: CRD → operator → runtime string-mode tool calling.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 16. `cac95b0`
+
+```
+Hash: cac95b02fd7cf1010170130aaa24fcbbcb1dc5d9
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 09:42:07 +0100
+
+Subject: feat(agent): add custom agent image support with container.image CRD override
+
+Implements custom agent image pattern:
+- Agent CRD container.image and container.command overrides applied in controller
+- create_agent_server() accepts custom_pydantic_agent parameter for custom tools
+- Agent.get_agent_card() exposes native Pydantic AI tools in skills list
+- Example custom agent with add/multiply/random_number tools
+- E2E test validates custom image deployment, tool discovery, and invocation
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 17. `9023c9e`
+
+```
+Hash: 9023c9e4ad44d2b2344db8913dcd7921375999ff
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 09:46:19 +0100
+
+Subject: docs: update instructions and VitePress docs for string-mode and custom agent image
+
+Adds string-mode documentation to:
+- python.instructions.md: string_mode.py, TOOL_CALL_MODE env var, custom agent pattern
+- copilot-instructions.md: string_mode.py in key files
+- agentic-loop.md: string-mode section with CRD config and mode table
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 18. `eca4abb`
+
+```
+Hash: eca4abb69e1292772aa03b9680a3dadaf54c5295
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 12:16:30 +0100
+
+Subject: refactor(operator): replace cherry-picked container overrides with strategic merge
+
+Replace individual field checks for image, command, args, resources, and env
+in the agent controller with a single strategic merge patch approach. This
+ensures all ContainerOverride fields are applied consistently and new fields
+added to ContainerOverride will automatically work without controller changes.
+
+The merge order is: base container → spec.container (strategic merge) →
+spec.podSpec (strategic merge), giving users full control over container
+and pod configuration.
+
+Add integration tests verifying all container override fields are applied
+via strategic merge, env var override semantics (user wins), and that
+probes/ports from the base container are preserved.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 19. `187dabe`
+
+```
+Hash: 187dabe343e8df6266950b9f630f56c4cd2feb93
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 12:34:01 +0100
+
+Subject: refactor(framework): remove unused modelapi and mcptools modules
+
+Delete data-plane/kaos-framework/modelapi/ and mcptools/ directories
+that were replaced by Pydantic AI's built-in OpenAIChatModel and
+MCPServerStreamableHTTP. Remove stale logger names from server.py.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 20. `cd78fdc`
+
+```
+Hash: cd78fdc2f56713eb8b279233219f4979cd6bea03
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 12:35:28 +0100
+
+Subject: docs: add custom agent image example to VitePress docs
+
+Create docs/examples/custom-agent.md following the same pattern as
+custom-mcp-server.md with step-by-step guide for building custom
+Pydantic AI agent images with KAOS container.image CRD override.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 21. `3dfb890`
+
+```
+Hash: 3dfb8906cc822959a8db16334332fe321dd3d969
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 13:34:34 +0100
+
+Subject: fix(framework): replace run_stream with iter() for streaming support
+
+Replace run_stream() with agent.iter() to fix string-mode streaming error
+'FunctionModel must receive a stream_function to support streamed requests'.
+
+iter() provides node-by-node control over the agentic loop:
+- Emits progress events for tool calls (frontend reasoning status)
+- Yields final text response after agentic loop completes
+- Works for both native and string-mode without stream_function
+- Matches old two-phase behavior: progress events + final response
+
+Add test for streaming progress events verifying SSE format.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 22. `dbecda0`
+
+```
+Hash: dbecda0017005e581d6127dbf156177b331e0b77
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 14:32:24 +0100
+
+Subject: feat(framework): add step and max_steps to streaming progress events
+
+Include step counter and max_steps in progress JSON emitted during
+streaming, matching the old two-phase implementation format that the
+UI uses for reasoning progress display (e.g. 'Step 1/5: calling echo').
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 23. `4c004fd`
+
+```
+Hash: 4c004fdd33bd3553864d83a65a2b0bf07fbe6902
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 14:33:35 +0100
+
+Subject: feat(framework): distinguish delegate vs tool_call in progress events
+
+Emit action='delegate' with stripped agent name for delegate_to_* tools,
+and action='tool_call' for regular MCP tools in streaming progress events.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 24. `5944de2`
+
+```
+Hash: 5944de2fab26d1aa9fa746d4909c494e95aeb2ed
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 16:12:24 +0100
+
+Subject: feat(framework): enable Pydantic AI OTEL instrumentation
+
+Add instrument=True to Agent constructor and Agent.instrument_all(True)
+at server startup when OTEL is enabled. This activates Pydantic AI's
+native GenAI semantic convention spans (agent runs, model calls, tool
+execution) which automatically nest under KAOS's agent.agentic_loop
+span via the shared global TracerProvider.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 25. `381e625`
+
+```
+Hash: 381e6254901199ca0953c9b5abbb9c3382096829
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 16:16:33 +0100
+
+Subject: docs: add OTEL instrumentation section to Python framework instructions
+
+Document Pydantic AI instrumentation enablement, span correlation with
+KAOS's KaosOtelManager, and references to full refactor plan and
+telemetry deep-dive reports.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 26. `b853ad2`
+
+```
+Hash: b853ad2a749ddc10db1fd3809ca0a25b6f51faf0
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 16:55:36 +0100
+
+Subject: fix(framework): fix delegation closure exposing internal params to model
+
+Replace default-parameter closure pattern (_s=sub_agent, _n=name) with
+proper nested closure via _register_single_delegation_tool() method.
+Pydantic AI was exposing _s and _n as optional tool parameters, allowing
+the model to override the RemoteAgent object with a string value.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 27. `5e8b7f8`
+
+```
+Hash: 5e8b7f83ba9697b9b8451e8152e0ca8388622597
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 17:00:34 +0100
+
+Subject: refactor(telemetry): replace KaosOtelManager with standard OTEL context managers
+
+Remove KaosOtelManager class (~300 LOC) and span_begin/success/failure
+pattern that caused context detach errors in async tasks. Replace with:
+- tracer.start_as_current_span() context managers for delegation spans
+- Server-side request span using extracted parent context
+- Module-level helper functions: get_tracer, get_delegation_metrics,
+  inject_trace_context, extract_trace_context
+- Pydantic AI's own spans (via instrument=True) for agent/model/tool tracing
+
+Fixes 'token was created in a different Context' ValueError when
+Pydantic AI runs tools in parallel via asyncio.create_task().
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 28. `82cdf1a`
+
+```
+Hash: 82cdf1a15ac4cf66cb2e967fc0ff39ba13e6c7d7
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 17:02:17 +0100
+
+Subject: docs: update python instructions for new OTEL architecture
+
+Replace KaosOtelManager references with new module-level helper functions.
+Document that Pydantic AI uses OTEL Logger API (not Python logging).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 29. `9f901a5`
+
+```
+Hash: 9f901a5974ed22092f0f3369af9bad3d50b85cc2
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 18:16:31 +0100
+
+Subject: fix(telemetry): fix server-run span lifecycle for streaming and non-streaming
+
+Move span from chat_completions handler into _complete_chat_completion
+and inside generate_stream() in _stream_chat_completion. Previously the
+span closed before FastAPI consumed the async generator, causing all
+Pydantic AI spans and KAOS logs to be uncorrelated with the server span.
+
+- Rename chat_completions span to server-run (aligns with Pydantic AI naming)
+- Add session.id attribute to server-run span for trace filtering
+- Pass parent_ctx to both methods for proper distributed trace parenting
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 30. `09c43e1`
+
+```
+Hash: 09c43e135920daf6373690b2d7b5fb5a020988e9
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 19:49:58 +0100
+
+Subject: feat(telemetry): pass explicit OTEL providers to Pydantic AI instrumentation
+
+Replace instrument_all(True) with InstrumentationSettings that explicitly
+binds KAOS's TracerProvider, MeterProvider, and LoggerProvider to Pydantic AI.
+Ensures both frameworks use the exact same SDK instances for consistent
+trace correlation, metrics, and log export.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 31. `2df52dc`
+
+```
+Hash: 2df52dc22bdba06747f40d3ed129775aef536e27
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 19:51:17 +0100
+
+Subject: feat(telemetry): add configurable Pydantic AI OTEL instrumentation version
+
+Add OTEL_INSTRUMENTATION_VERSION (default: 4) and OTEL_EVENT_MODE (default:
+attributes) env vars to control Pydantic AI instrumentation behavior.
+Version 4 enables latest features including multimodal support. Setting
+event_mode='logs' forces version 1 with OTEL log records (deprecated).
+Update python instructions with new env vars and OTEL architecture docs.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 32. `d4f1406`
+
+```
+Hash: d4f14067ec91f2b02c04533a1274732bfaf3ffb9
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:18:00 +0100
+
+Subject: fix(telemetry): remove explicit instrument=True to use instrument_all() settings
+
+instrument=True on PydanticAgent constructor creates fresh default
+InstrumentationSettings (version=2, event_mode=attributes), bypassing
+the custom settings configured via instrument_all() in server.py.
+Removing it allows the class-level _instrument_default to be used,
+which carries the correct version/event_mode from OTEL env vars.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 33. `b8b720b`
+
+```
+Hash: b8b720b2d2aa74aafea02c2a0ae0da84f38f509b
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:20:29 +0100
+
+Subject: docs: document instrument_all() behavior and OTEL event log correlation
+
+Add note about not using instrument=True on PydanticAgent constructor
+(bypasses instrument_all settings). Document version 1 + event_mode=logs
+behavior for OTEL LogRecord events.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 34. `194b202`
+
+```
+Hash: 194b202b22f5997230b76e91c85cd599f6ff9837
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:26:58 +0100
+
+Subject: refactor(telemetry): move OTEL instrumentation config into AgentServerSettings
+
+Add otel_instrumentation_version (default: 4) and otel_event_mode
+(Literal['attributes', 'logs'], default: 'attributes') to
+AgentServerSettings. Removes raw os.environ.get() calls and provides
+type validation via Pydantic BaseSettings.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 35. `b4b99e4`
+
+```
+Hash: b4b99e466d76219606b87758c5811f7f6c8f19ba
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:33:37 +0100
+
+Subject: refactor(agent): remove memory_enabled flag, use NullMemory as no-op
+
+Replace all 'if self.memory_enabled' conditional checks in client.py
+with unconditional memory calls. NullMemory absorbs calls silently,
+eliminating 7 branch points and simplifying the control flow.
+
+- Remove memory_enabled parameter from Agent constructor
+- Update server.py to not pass memory_enabled
+- Update tests to use NullMemory() instead of memory_enabled=False
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 36. `c63ae22`
+
+```
+Hash: c63ae227937d43961102f2271fa628022ea00d95
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:37:06 +0100
+
+Subject: refactor(memory): extract Memory ABC with shared create_event and build_conversation_context
+
+Introduce Memory abstract base class with canonical interface.
+Move create_event() (with OTEL trace context) and
+build_conversation_context() into base class, eliminating duplication
+between LocalMemory and RedisMemory. NullMemory now extends Memory ABC.
+Remove unused InMemorySessionService alias and Union type.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 37. `7479044`
+
+```
+Hash: 7479044055f19399eba59c9a5b0ea826dd812646
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:39:54 +0100
+
+Subject: refactor(agent): replace _current_session_id with RunContext deps
+
+Use Pydantic AI RunContext dependency injection to pass session_id
+to delegation tools instead of mutable per-Agent state. This makes
+delegation concurrency-safe under concurrent requests.
+
+- Add AgentDeps dataclass with session_id field
+- Switch delegation tools from tool_plain to tool (receives RunContext)
+- Pass deps=AgentDeps(session_id=...) to agent.run() and agent.iter()
+- Remove _current_session_id mutable field entirely
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 38. `5b02590`
+
+```
+Hash: 5b025902ca81c2ff8c9e491b9e55a6c60eac0a37
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:40:40 +0100
+
+Subject: refactor(agent): extract _resolve_model factory function
+
+Move model resolution logic (mock/string/native) from Agent.__init__
+into standalone _resolve_model() function, reducing __init__ from
+~30 lines of model branching to a single function call.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 39. `f40997e`
+
+```
+Hash: f40997e4f25f936fcb8a705ec9125e77ff155231
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:43:31 +0100
+
+Subject: refactor: remove unused imports across client.py and server.py
+
+Remove: is_otel_enabled, ATTR_SESSION_ID, NullMemory (from client.py),
+model_validator, LocalMemory top-level import (from server.py).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 40. `3956fe0`
+
+```
+Hash: 3956fe0e388b385e151d1b5d7807147c09dcfc1f
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:44:33 +0100
+
+Subject: refactor(agent): consolidate RemoteAgent to single httpx client
+
+Replace separate discovery and request httpx.AsyncClient instances
+with a single shared client, reducing resource usage and simplifying
+lifecycle management.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 41. `47d3d20`
+
+```
+Hash: 47d3d20a3c8d0048f23c53d1d9b8901381fba06d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:45:27 +0100
+
+Subject: refactor(telemetry): remove unused ATTR_AGENT_NAME and ATTR_SESSION_ID constants
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 42. `c899c72`
+
+```
+Hash: c899c72bd78e36e5c0efcfa177139af550152000
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:46:09 +0100
+
+Subject: refactor(server): compact startup logging from 46 lines to 5
+
+Replace verbose multi-line startup banner with concise structured
+log lines covering agent config, model, and OTEL status.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 43. `a012423`
+
+```
+Hash: a012423e3afe60a01630745c3490db37bb9ef02c
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 20:48:29 +0100
+
+Subject: docs: update python instructions for Memory ABC, AgentDeps, NullMemory
+
+Reflect simplification changes: Memory ABC interface, AgentDeps
+dependency injection via RunContext, NullMemory as no-op pattern,
+removed memory_enabled flag.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 44. `272d4a1`
+
+```
+Hash: 272d4a1716a53b47035697fec529b6a4e9d7e0c3
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:29:05 +0100
+
+Subject: refactor(agent): add memory to AgentDeps for RunContext access
+
+Move memory reference into AgentDeps dataclass so delegation tools
+access memory via ctx.deps.memory instead of self.memory closure.
+This decouples tools from the Agent instance and enables future
+custom tools to access memory through the standard Pydantic AI
+dependency injection pattern.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 45. `b444199`
+
+```
+Hash: b444199249b5e04652e2e1dba1bbddf51ae760c8
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:30:11 +0100
+
+Subject: refactor(server): extract shared span attrs and SSE formatting helpers
+
+Extract _build_span_attrs() to deduplicate span attribute construction
+between streaming and non-streaming completion methods. Extract
+_format_sse_chunk() module-level helper for SSE data line formatting.
+Reduces duplication and makes the server a thinner protocol adapter.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 46. `d61584c`
+
+```
+Hash: d61584c599492fc1cfb52367dc27a8bc7e3dca62
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:31:26 +0100
+
+Subject: refactor(server): remove unused os/re imports from create_agent_server
+
+Both os and re were imported locally inside create_agent_server but
+os is already imported at module level and re was not used at all.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 47. `c6cbcfc`
+
+```
+Hash: c6cbcfce8f9bd51f97e2ae0ff89035ff9f8d6426
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:32:28 +0100
+
+Subject: refactor(agent): extract _format_progress_event from streaming loop
+
+Move inline progress event JSON formatting (~15 lines) into a
+dedicated method, reducing the streaming loop from 18 to 8 lines.
+No behavioral change; same JSON progress events are emitted.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 48. `ab7cd2d`
+
+```
+Hash: ab7cd2d6fc0b53b30e4f6e72f5c2f304e3deae28
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:33:51 +0100
+
+Subject: refactor(memory): add close() to Memory ABC, remove hasattr check
+
+Add a no-op close() method to the Memory ABC base class so all
+implementations have it. This eliminates the hasattr check in
+Agent.close() and makes the interface complete.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 49. `92704ba`
+
+```
+Hash: 92704ba646505c533d4d9bc90812b49245919001
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:34:42 +0100
+
+Subject: refactor(server): remove unused ChatCompletionRequest model and BaseModel import
+
+ChatCompletionRequest was defined but never used — the chat endpoint
+parses request.json() directly. Removes the class and its unused
+pydantic BaseModel import.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 50. `174a424`
+
+```
+Hash: 174a42484699378d0841dcb9f6bbffa638f26e5e
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:35:22 +0100
+
+Subject: refactor(agent): simplify AgentCard.to_dict using dataclasses.asdict
+
+Replace manual dict construction with stdlib asdict(), reducing 6
+lines to 1 and ensuring new fields are automatically included.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 51. `7c5ffea`
+
+```
+Hash: 7c5ffea3c79f220696d07d71ca809712fbf6eeec
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-21 21:38:53 +0100
+
+Subject: docs: update python instructions for AgentDeps.memory and @agent.tool
+
+Update AgentDeps documentation to include memory field. Fix delegation
+tool decorator from @agent.tool_plain to @agent.tool (receives RunContext).
+Document Memory ABC close() method and AgentCard asdict().
+```
+
+### 52. `39c12f4`
+
+```
+Hash: 39c12f41f6fbd6ba665768caa30854963e7d6c35
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 08:02:47 +0100
+
+Subject: refactor(server): improve startup logging with INFO summary and DEBUG settings dump
+
+INFO level: single-line compact summary (agent, model, tools, sub-agents, memory, otel)
+DEBUG level: full AgentServerSettings dump, per-sub-agent status, per-MCP-server detail
+Stores settings on AgentServer for DEBUG-level config inspection at startup.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 53. `25ea96d`
+
+```
+Hash: 25ea96d9933b599c50736988a81c4fa7ce6d2751
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 11:35:06 +0100
+
+Subject: refactor(agent): extract tools.py with DelegationToolset and string mode
+
+Create agent/tools.py consolidating:
+- DelegationToolset (AbstractToolset subclass) for sub-agent delegation
+- execute_delegation() extracted from Agent._execute_delegation
+- format_progress_event() extracted from Agent._format_progress_event
+- String-mode tool calling (build_string_mode_handler, parse_tool_calls_from_text)
+  absorbed from string_mode.py
+
+Delete string_mode.py (fully merged into tools.py).
+Update client.py to import from agent.tools.
+Update test imports accordingly.
+```
+
+### 54. `75165db`
+
+```
+Hash: 75165db3de78d96adca18e5d030978a700db974d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 11:36:16 +0100
+
+Subject: refactor(memory): add message history and storage utilities to Memory base
+
+Add concrete methods to Memory ABC:
+- build_message_history(): converts KAOS events to Pydantic AI ModelRequest/ModelResponse
+- store_pydantic_message(): converts Pydantic AI messages to KAOS memory events
+
+Both methods use self.get_session_events()/self.add_event() so all
+implementations (Local, Redis, Null) inherit the logic automatically.
+```
+
+### 55. `85b5118`
+
+```
+Hash: 85b5118f33f00e4e78ca3dbbdc97da9434e308ac
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 11:42:41 +0100
+
+Subject: refactor(server): consolidate model resolution, deps, and remote agent
+```
+
+### 56. `f529932`
+
+```
+Hash: f529932d8d4c9e2afaa3e8e575da68d99360510e
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 11:47:22 +0100
+
+Subject: refactor(server): move process_message into AgentServer
+```
+
+### 57. `c894d52`
+
+```
+Hash: c894d5215355cdf408775482c95e55ac65960adc
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 11:58:33 +0100
+
+Subject: refactor(agent): remove Agent wrapper class and client.py
+
+- Delete client.py entirely; AgentServer is now the single entry point
+- create_agent_server() builds PydanticAgent directly with DelegationToolset
+- Add tests/helpers.py with make_test_server() factory for all tests
+- Migrate all tests from Agent() to make_test_server()
+- 96 tests pass, lint clean
+```
+
+### 58. `8480a7c`
+
+```
+Hash: 8480a7cd119a1ac2df04b8eacd8460ac24e54d06
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 12:01:33 +0100
+
+Subject: docs: update instructions for agent refactor — server-centric architecture
+
+- Update python.instructions.md: AgentServer is central, DelegationToolset, tools.py
+- Update copilot-instructions.md: remove client.py references, update project structure
+- Update REPORT.md with Phase 9 outcomes
+```
+
+### 59. `8e7939e`
+
+```
+Hash: 8e7939e0a0cd726462ee65a72982fb349ead082a
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 12:25:15 +0100
+
+Subject: fix(delegation): remove _active filter from DelegationToolset.get_tools()
+
+RemoteAgent._active starts False and lazy-inits on first call. The filter
+in get_tools() prevented delegation tools from being exposed to the model,
+causing E2E delegation failures.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 60. `47d33b2`
+
+```
+Hash: 47d33b237470ed22af03520715662eabebe0d6ac
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 13:24:48 +0100
+
+Subject: refactor(e2e): move custom agent test to examples shard
+
+- Convert custom-agent.md to Jupytext-executable format (%%writefile, bash blocks)
+- Add test_custom_agent_example to test_examples_e2e.py
+- Add example-custom-agent CI shard, move Docker build from core shard
+- Remove test_custom_agent_image from test_base_func_e2e.py
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 61. `87b79b8`
+
+```
+Hash: 87b79b8bb7e61c217c7d2144172522a8fd254a2d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 15:45:15 +0100
+
+Subject: refactor(framework): remove dead mock_model_server.py (188 lines)
+
+File only contained self-imports with no external consumers.
+All test functionality already covered by DEBUG_MOCK_RESPONSES
+and FunctionModel-based mocking in helpers.py.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 62. `2562504`
+
+```
+Hash: 2562504566d3bff3bfbec9a8dd300c24c3e5dc3a
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 15:57:16 +0100
+
+Subject: refactor(framework): trim verbose docstrings across package (-337 lines)
+
+Remove obvious/repetitive docstrings from memory.py, server.py,
+telemetry/manager.py, and tests/conftest.py. Keep Memory ABC
+interface docstrings and non-obvious behavior documentation.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 63. `c9517fc`
+
+```
+Hash: c9517fcb99b80e0454c4a03372f5609d653c0a37
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:01:12 +0100
+
+Subject: refactor(framework): extract models.py from server.py (1107→754 lines)
+
+Move data classes (AgentDeps, AgentCard, RemoteAgent, _MockResponseState),
+settings (AgentServerSettings), model resolution (_resolve_model,
+_build_mock_model_function), and helpers (_extract_user_prompt,
+_format_sse_chunk) to new agent/models.py (286 lines).
+
+Breaks bidirectional server↔tools dependency: tools.py now imports
+from models.py under TYPE_CHECKING instead of server.py.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 64. `8d32d37`
+
+```
+Hash: 8d32d3798a2732af579e245e4661eed100139722
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:02:37 +0100
+
+Subject: refactor(framework): decompose create_agent_server into focused helpers
+
+Extract _parse_mcp_servers, _parse_sub_agents, _create_memory, and
+_setup_otel_instrumentation from the 174-line factory function.
+create_agent_server now reads as a clear composition recipe.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 65. `f2fd396`
+
+```
+Hash: f2fd396ecbdc52a40417ea0d14c943fea44a9a38
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:03:27 +0100
+
+Subject: refactor(framework): simplify configure_logging, remove redundant child logger levels
+
+Remove explicit child logger level setting (children inherit from root
+via basicConfig). Consolidate third-party suppression into loop.
+52→38 lines, same functionality.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 66. `b7e51a4`
+
+```
+Hash: b7e51a41cf8695ccc0810d70e51eb89ca83dd9e2
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:04:11 +0100
+
+Subject: refactor(framework): extract _prepare_run() from _process_message
+
+Move shared pre-run setup (session, delegation detection, memory
+event, history, deps, limits) into _prepare_run() method. Stream
+and non-stream branches now start with clean run params.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 67. `92a477a`
+
+```
+Hash: 92a477ac53f4b4f411c41fcbcdad71647b83069a
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:05:55 +0100
+
+Subject: refactor(framework): replace _function_toolset private API with custom_tools list
+
+Extract custom tool names at create_agent_server() time and pass
+as explicit list to AgentServer. Removes access to Pydantic AI
+internal _function_toolset in _get_agent_card.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 68. `3fd5473`
+
+```
+Hash: 3fd5473d19c94ff7b61484e7ac2cb8ac916b368b
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:06:33 +0100
+
+Subject: refactor(framework): simplify _log_startup_config to single INFO + DEBUG dump
+
+Consolidate startup logging: single INFO line with all key params
+(name, port, model, memory, sub_agents, otel, custom_tools).
+DEBUG level dumps full settings. Remove per-sub-agent/mcp loops.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 69. `35813c1`
+
+```
+Hash: 35813c194e75a8e085443fdfccd6fcddf3323dc5
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:07:09 +0100
+
+Subject: refactor(framework): flatten _setup_telemetry with early return and single log
+
+Early return when OTEL disabled, merge instrumentor blocks, single
+log line for enabled instrumentations. 30→18 lines.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 70. `e75003a`
+
+```
+Hash: e75003a2289010209dc8140bdcd79d271525803b
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:54:23 +0100
+
+Subject: refactor(framework): rename models.py to config.py for clarity
+
+The module contains AgentServerSettings, AgentDeps, RemoteAgent, AgentCard,
+and helper functions - 'config' better describes its role than 'models'.
+
+Updated imports in server.py, tools.py, and all test files.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 71. `bce94ec`
+
+```
+Hash: bce94ec57bd160d34002c57c49eb68e33a7b6dfd
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 16:56:04 +0100
+
+Subject: refactor(framework): flatten telemetry/ folder into agent/telemetry.py
+
+Moved telemetry/manager.py to agent/telemetry.py and removed the
+single-file telemetry/ folder. Updated all imports and Dockerfiles
+(main, custom-agent example, docs example) to remove telemetry/ COPY.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 72. `626a177`
+
+```
+Hash: 626a177000e65e008e9858233c17f8f4dbf8de1a
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 17:00:34 +0100
+
+Subject: refactor(framework): store settings directly, remove 6 duplicate __init__ fields
+
+AgentServer now takes AgentServerSettings as required param instead of
+duplicating name/description/max_steps/memory_context_limit/port/access_log.
+All self.name references replaced with self.settings.agent_name etc.
+Factory return simplified from 15 to 9 params. Test helper updated.
+model_api_url and model_name defaults added for test scenarios.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 73. `18e2afc`
+
+```
+Hash: 18e2afc40703c821fe2539305d2637074a518210
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 17:01:27 +0100
+
+Subject: refactor(framework): extract _build_chat_response helper for response dict
+
+Moved OpenAI-compatible response dict construction to a standalone
+function, eliminating inline dict literal from _complete_chat_completion.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 74. `8bae64a`
+
+```
+Hash: 8bae64a38aa43be7bcdc55c06df8357d2da9bf33
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 17:02:14 +0100
+
+Subject: refactor(framework): combine health/ready into _probe_response helper
+
+Extracted shared probe response logic into _probe_response(status)
+method, reducing duplication between health and ready endpoints.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 75. `db7381e`
+
+```
+Hash: db7381e7bc4212ad0fb2ae685f13b79039f9b1e0
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 17:02:51 +0100
+
+Subject: refactor(framework): simplify _get_agent_card with list comprehensions
+
+Unified capability detection for custom_tools and mcp_servers. Replaced
+manual append loops with extend + generator expressions.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 76. `d70a83a`
+
+```
+Hash: d70a83a02f1addd15a86db207c8d18a25b51ccdb
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 17:09:25 +0100
+
+Subject: refactor(framework): rename agent/ to kaos_server/, kaos-framework/ to kaos-server/
+
+Package rename for consistency: the module is a server framework, not
+just an agent. Updated all Python imports, Dockerfiles (3), GitHub
+workflows (6 files), docs (5 files), operator build script, examples,
+notebook, and instruction files.
+
+Docker image name (kaos-agent) remains unchanged.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 77. `8f4f798`
+
+```
+Hash: 8f4f798a4e029aac3fe874cd4cb136dfdba1575b
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:01:22 +0100
+
+Subject: refactor(framework): rename config.py to serverutils.py for clarity
+
+Module contains helpers, data classes, and utilities — not just config.
+Rename avoids confusion with actual configuration (AgentServerSettings).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 78. `0ffa8d5`
+
+```
+Hash: 0ffa8d54d933288f48a2889ab7ca29084b86c0a5
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:04:04 +0100
+
+Subject: refactor(framework): inline inject/extract_trace_context wrappers
+
+Remove trivial one-line wrappers from telemetry.py. Use
+opentelemetry.propagate.inject/extract directly at call sites.
+Remove unused inject_trace_context import from tools.py.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 79. `af3b48d`
+
+```
+Hash: af3b48de4c6ea5b438cbe7d9a505e0a84ee3e3a0
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:05:38 +0100
+
+Subject: refactor(framework): replace get_tracer/get_service_name with SERVICE_NAME global
+
+Compute SERVICE_NAME once at module level instead of calling os.getenv
+on every tracer/meter creation. Remove _get_service_name() and
+get_tracer() wrapper functions. Callers use trace.get_tracer(SERVICE_NAME).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 80. `7ebd90b`
+
+```
+Hash: 7ebd90bcae63e8c719982cd3a73ce6f11ca10b94
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:07:26 +0100
+
+Subject: refactor(framework): convert _resolve_model to keyword-only params
+
+Use keyword-only arguments after 'name' for clarity at call sites.
+All params now have defaults, making calls self-documenting.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 81. `1972016`
+
+```
+Hash: 197201652e1c665d076ae9da1a23afa942cb25cf
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:09:17 +0100
+
+Subject: refactor(framework): consolidate SSE/response builders in serverutils.py
+
+Move _build_chat_response to serverutils.py. Replace _format_sse_chunk
+with _build_streaming_chunk supporting content=None and finish_reason
+params. Eliminates manual final stop chunk dict in streaming path.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 82. `7cea2e8`
+
+```
+Hash: 7cea2e80b9e468fdf9254a1e56170d9904e46ed2
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:10:07 +0100
+
+Subject: docs(framework): add chat_id vs session_id clarifying comments
+
+chat_id is per-completion (OpenAI spec), session_id is cross-request
+memory (KAOS feature). They are intentionally different by design.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 83. `7a286d9`
+
+```
+Hash: 7a286d9142ae3facdc5ba88f7fc79952ea2f62d4
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:15:00 +0100
+
+Subject: refactor(framework): rename kaos-server to pai-server (Pydantic AI Server)
+
+Rename package kaos_server → pai_server, folder kaos-server → pai-server.
+Update all imports, Dockerfiles, workflows, docs, operator build script,
+examples, and instructions. Rename pyproject.toml from kaos-runtime to
+pai-server.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 84. `33eeccf`
+
+```
+Hash: 33eeccf160f1b1807a378c7928ef86276bfc19a3
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:15:42 +0100
+
+Subject: docs(framework): add PAIS README for standalone pai-server package
+
+Branded as PAIS (Pydantic AI Server) with features, quick start,
+configuration, architecture, and module structure documentation.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 85. `0f6c397`
+
+```
+Hash: 0f6c397d7c95843c34897738f295fb89b5de9b4d
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-22 21:41:49 +0100
+
+Subject: docs: update instructions for serverutils.py and telemetry.py changes
+
+Fix project structure in copilot-instructions and python.instructions
+to reflect serverutils.py extraction and telemetry folder flattening.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 86. `61437ef`
+
+```
+Hash: 61437ef7b6db0cb1dc027a5f52f9ec4b3f3239d2
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-23 21:09:13 +0100
+
+Subject: refactor(server): consolidate chat_id and session_id into single identifier
+
+Use session_id directly as the OpenAI response 'id' field instead of
+generating a separate random chatcmpl-{uuid}. Session resolution moved
+to route handler so auto-generated session IDs are returned to clients
+in the response, enabling follow-up requests and memory queries.
+
+Removes uuid import from server.py and serverutils.py.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 87. `5aa0914`
+
+```
+Hash: 5aa091403942a13674d919d4a492322639adf86f
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 19:46:02 +0100
+
+Subject: feat(agent-card): implement A2A-compliant agent card format
+
+- Replace AgentCard dataclass with Pydantic BaseModel using alias_generator=to_camel
+- Add AgentCardCapabilities and AgentCardSkill models per A2A protocol v0.3.0
+- Change endpoint from /.well-known/agent to /.well-known/agent.json
+- Add __version__ via importlib.metadata from pyproject.toml
+- Fix Dockerfile to install package for metadata access
+- Update RemoteAgent to parse A2A card format
+- Update all tests (unit, integration, E2E) for new card structure
+- Update docs, instructions, and operator Go comment
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 88. `df3359c`
+
+```
+Hash: df3359ce1d64582d4497ff85d383d705a8837a76
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 20:01:03 +0100
+
+Subject: fix(a2a): update CLI agent card path to /.well-known/agent.json and regenerate notebook
+
+- Update kaos CLI agent status command to use A2A-compliant /.well-known/agent.json path
+- Parse capabilities as dict (A2A format) showing only enabled capabilities
+- Regenerate custom-agent.ipynb from updated markdown source
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 89. `56af538`
+
+```
+Hash: 56af538953cbb1f70d3cec1f66e8028251f902aa
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 20:36:32 +0100
+
+Subject: fix(examples): update unified-mcp-gateway to check A2A capabilities format
+
+- Replace grep for old 'tool_execution' capability with 'streaming' (A2A dict format)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 90. `8f03caf`
+
+```
+Hash: 8f03cafd28e64b9aa78fd0cd0340279df89ff6ba
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 20:38:54 +0100
+
+Subject: fix(examples): regenerate unified-mcp-gateway notebook for A2A capabilities
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+### 91. `264a22d`
+
+```
+Hash: 264a22d73692b68ffac16242bc6728abe09c0b8a
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 21:14:56 +0100
+
+Subject: chore: updated PAIS documentation
+
+Signed-off-by: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+```
+
+### 92. `dcd579e`
+
+```
+Hash: dcd579ed342edf69e532774bee05a9a3c2823709
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 21:24:45 +0100
+
+Subject: chore: updated PAIS documentation
+
+Signed-off-by: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+```
+
+### 93. `5b28a69`
+
+```
+Hash: 5b28a691f63e96cb70bf1732b5a1863459f895a4
+Author: Alejandro Saucedo <alejandro.saucedo@zalando.de>
+Date: 2026-02-24 21:59:42 +0100
+
+Subject: fix: pre-merge review fixes — pyproject, Makefile, docs, and TODO comments
+
+CRITICAL:
+- Fix pyproject.toml packages: ["agent","telemetry","tests"] → ["pai_server"]
+- Fix Makefile run target: server:app → pai_server.server:get_app --factory
+
+HIGH:
+- Fix README: build_app() → server.app, AGENT_SYSTEM_PROMPT → AGENT_INSTRUCTIONS
+- Fix docs: remove non-existent client.py refs, update module structure diagram
+- Fix testing.md: update all paths from cd python → cd data-plane/pai-server
+- Fix agent.md: update delegation example to use serverutils.RemoteAgent
+
+MEDIUM:
+- Fix broken COPY line in docs/examples/custom-agent.md
+- Fix unused AgentServer import in examples/custom-agent/server.py
+- Fix AGENT_SYSTEM_PROMPT → AGENT_INSTRUCTIONS in python.instructions.md
+- Fix stale cd python refs in installation.md and docker-images.md
+- Regenerate custom-agent.ipynb
+
+TODO comments added for deferred items:
+- D1: Memory race condition in get_or_create_session (LocalMemory + RedisMemory)
+- D2: Agent card base_url hardcoded to localhost
+- D3: MCP server connections not closed on shutdown
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
